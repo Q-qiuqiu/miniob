@@ -26,6 +26,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/meta_util.h"
 #include "storage/table/table.h"
 #include "storage/table/table_meta.h"
+#include "storage/index/index.h"
 #include "storage/trx/trx.h"
 #include "storage/clog/disk_log_handler.h"
 #include "storage/clog/integrated_log_replayer.h"
@@ -226,6 +227,67 @@ void Db::all_tables(vector<string> &table_names) const
   for (const auto &table_item : opened_tables_) {
     table_names.emplace_back(table_item.first);
   }
+}
+
+RC Db::drop_table(const char *table_name)
+{
+  RC rc = RC::SUCCESS;
+  
+  if (common::is_blank(table_name)) {
+    LOG_WARN("invalid argument. table name is empty");
+    return RC::INVALID_ARGUMENT;
+  }
+  
+  // 查找表
+  auto iter = opened_tables_.find(table_name);
+  if (iter == opened_tables_.end()) {
+    LOG_WARN("no such table. db=%s, table_name=%s", name_.c_str(), table_name);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+  
+  Table *table = iter->second;
+  
+  // 记录表文件路径
+  string meta_file_path = table_meta_file(path_.c_str(), table_name);
+  string data_file_path = table_data_file(path_.c_str(), table_name);
+  
+  // 获取所有索引文件路径
+  std::vector<std::string> index_files;
+  const std::vector<Index *> &indexes = table->indexes();
+  for (Index *index : indexes) {
+    string index_file_path = table_index_file(path_.c_str(), table_name, index->index_meta().name());
+    index_files.push_back(index_file_path);
+  }
+  
+  // 从数据库中移除表
+  opened_tables_.erase(iter);
+  
+  // 删除表对象
+  delete table;
+  
+  // 删除磁盘上的表文件
+  // 先删除数据文件
+  if (::unlink(data_file_path.c_str()) < 0) {
+    LOG_WARN("failed to delete data file. file=%s, error=%s", data_file_path.c_str(), strerror(errno));
+    // 即使删除文件失败，仍然继续执行，因为表已经从内存中移除
+  }
+  
+  // 删除索引文件
+  for (const string &index_file : index_files) {
+    if (::unlink(index_file.c_str()) < 0) {
+      LOG_WARN("failed to delete index file. file=%s, error=%s", index_file.c_str(), strerror(errno));
+      // 继续执行
+    }
+  }
+  
+  // 最后删除元数据文件
+  if (::unlink(meta_file_path.c_str()) < 0) {
+    LOG_WARN("failed to delete meta file. file=%s, error=%s", meta_file_path.c_str(), strerror(errno));
+    // 继续执行
+  }
+  
+  LOG_INFO("Successfully drop table %s.%s", name_.c_str(), table_name);
+  return rc;
 }
 
 RC Db::sync()

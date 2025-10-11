@@ -28,7 +28,16 @@ RC CreateTableStmt::create(Db *db, const CreateTableSqlNode &create_table, Stmt 
   if (storage_format == StorageFormat::UNKNOWN_FORMAT) {
     return RC::INVALID_ARGUMENT;
   }
-  stmt = new CreateTableStmt(create_table.relation_name, create_table.attr_infos, storage_format);
+  
+  // 确保DATE类型字段长度正确设置为4字节
+  std::vector<AttrInfoSqlNode> corrected_attr_infos = create_table.attr_infos;
+  for (auto &attr : corrected_attr_infos) {
+    if (attr.type == AttrType::DATES && attr.length != 4) {
+      attr.length = 4;
+    }
+  }
+  
+  stmt = new CreateTableStmt(create_table.relation_name, corrected_attr_infos, storage_format);
   sql_debug("create table statement: table name %s", create_table.relation_name.c_str());
   return RC::SUCCESS;
 }

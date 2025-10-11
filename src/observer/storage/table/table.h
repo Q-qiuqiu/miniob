@@ -121,6 +121,7 @@ private:
 public:
   Index *find_index(const char *index_name) const;
   Index *find_index_by_field(const char *field_name) const;
+  const std::vector<Index *> &indexes() const { return indexes_; }
 
 private:
   Db                *db_ = nullptr;

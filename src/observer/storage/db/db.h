@@ -75,6 +75,12 @@ public:
    */
   Table *find_table(int32_t table_id) const;
 
+  /**
+   * @brief 删除一个表
+   * @param table_name 要删除的表名
+   */
+  RC drop_table(const char *table_name);
+
   /// @brief 当前数据库的名称
   const char *name() const;
 

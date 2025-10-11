@@ -2,7 +2,15 @@ MESSAGE(STATUS "This is CMAKE_CURRENT_SOURCE_DIR dir " ${CMAKE_CURRENT_SOURCE_DI
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 
+# Explicitly include all source files including those that might be missing
 FILE(GLOB_RECURSE ALL_SRC *.cpp *.c)
+
+# Explicitly add the drop table files to ensure they're included
+LIST(APPEND ALL_SRC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/sql/stmt/drop_table_stmt.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sql/executor/drop_table_executor.cpp
+)
+
 SET(MAIN_SRC ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 MESSAGE("MAIN SRC: " ${MAIN_SRC})
 FOREACH (F ${ALL_SRC})

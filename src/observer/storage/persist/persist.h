@@ -62,5 +62,6 @@ public:
 
 private:
   string file_name_;
+  // 当前打开文件的文件描述符，初始值为 -1 表示未打开任何文件
   int    file_desc_ = -1;
 };

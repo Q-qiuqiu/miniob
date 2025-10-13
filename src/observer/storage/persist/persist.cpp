@@ -111,6 +111,7 @@ RC PersistHandler::remove_file(const char *file_name)
       rc = RC::FILE_REMOVE;
     }
   } else if (!file_name_.empty()) {
+    // 如果文件已经打开，先关闭文件
     if (file_desc_ < 0 || (rc = close_file()) == RC::SUCCESS) {
       if (remove(file_name_.c_str()) == 0) {
         LOG_INFO("Successfully remove file %s.", file_name_.c_str());

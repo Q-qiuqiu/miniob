@@ -14,11 +14,16 @@ See the Mulan PSL v2 for more details. */
 #include "common/type/data_type.h"
 #include "common/type/vector_type.h"
 
+/**
+ * @brief 初始化 DataType 的静态成员 type_instances_
+ * @details 为每种 AttrType 类型创建对应的 DataType 实例
+ * 注意：某些类型（如 UNDEFINED、BOOLEANS）使用基类 DataType 的实例，而其他类型则使用特定的子类实例
+ */
 array<unique_ptr<DataType>, static_cast<int>(AttrType::MAXTYPE)> DataType::type_instances_ = {
-    make_unique<DataType>(AttrType::UNDEFINED),
-    make_unique<CharType>(),
-    make_unique<IntegerType>(),
-    make_unique<FloatType>(),
-    make_unique<VectorType>(),
-    make_unique<DataType>(AttrType::BOOLEANS),
+    make_unique<DataType>(AttrType::UNDEFINED),  ///< 未定义类型使用基类实例
+    make_unique<CharType>(),                     ///< 字符类型使用 CharType 子类实例
+    make_unique<IntegerType>(),                  ///< 整数类型使用 IntegerType 子类实例
+    make_unique<FloatType>(),                    ///< 浮点数类型使用 FloatType 子类实例
+    make_unique<VectorType>(),                   ///< 向量类型使用 VectorType 子类实例
+    make_unique<DataType>(AttrType::BOOLEANS)    ///< 布尔类型使用基类实例
 };

@@ -35,10 +35,27 @@ See the Mulan PSL v2 for more details. */
 #include "storage/table/heap_table_engine.h"
 #include "storage/table/lsm_table_engine.h"
 
+/**
+ * @brief 表类析构函数
+ */
 Table::~Table()
 {
 }
 
+/**
+ * @brief 创建一个表
+ * @details 创建表的元数据文件、数据文件，并初始化表引擎
+ * @param db 数据库指针
+ * @param table_id 表ID
+ * @param path 元数据保存的文件(完整路径)
+ * @param name 表名
+ * @param base_dir 表数据存放的路径
+ * @param attributes 字段信息列表
+ * @param primary_keys 主键列表
+ * @param storage_format 存储格式
+ * @param storage_engine 存储引擎类型
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, const char *base_dir,
     span<const AttrInfoSqlNode> attributes, const vector<string> &primary_keys, StorageFormat storage_format, StorageEngine storage_engine)
 {
@@ -128,6 +145,14 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
   return rc;
 }
 
+/**
+ * @brief 打开一个表
+ * @details 从文件加载表元数据，并初始化表引擎
+ * @param db 数据库指针
+ * @param meta_file 保存表元数据的文件完整路径
+ * @param base_dir 表所在的文件夹
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::open(Db *db, const char *meta_file, const char *base_dir)
 {
   // 加载元数据文件
@@ -175,39 +200,98 @@ RC Table::open(Db *db, const char *meta_file, const char *base_dir)
   return rc;
 }
 
+/**
+ * @brief 在表中插入一条记录
+ * @details 委托给表引擎执行插入操作
+ * @param record 要插入的记录
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::insert_record(Record &record)
 {
   return engine_->insert_record(record);
 }
 
+/**
+ * @brief 在页面锁保护的情况下访问记录
+ * @details 委托给表引擎执行访问操作
+ * @param rid 记录标识符
+ * @param visitor 访问者函数
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::visit_record(const RID &rid, function<bool(Record &)> visitor)
 {
   return engine_->visit_record(rid, visitor);
 }
 
+/**
+ * @brief 在事务上下文中插入记录
+ * @details 委托给表引擎执行事务插入操作
+ * @param record 要插入的记录
+ * @param trx 事务对象指针
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::insert_record_with_trx(Record &record, Trx *trx)
 {
   return engine_->insert_record_with_trx(record, trx);
 }
+
+/**
+ * @brief 在事务上下文中删除记录
+ * @details 委托给表引擎执行事务删除操作
+ * @param record 要删除的记录
+ * @param trx 事务对象指针
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::delete_record_with_trx(const Record &record, Trx *trx)
 {
   return engine_->delete_record_with_trx(record, trx);
 }
 
+/**
+ * @brief 在事务上下文中更新记录
+ * @details 委托给表引擎执行事务更新操作
+ * @param old_record 旧记录
+ * @param new_record 新记录
+ * @param trx 事务对象指针
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::update_record_with_trx(const Record &old_record, const Record &new_record, Trx* trx)
 {
   return engine_->update_record_with_trx(old_record, new_record, trx);
 }
 
+/**
+ * @brief 根据记录标识符获取记录
+ * @details 委托给表引擎执行获取记录操作
+ * @param rid 记录标识符
+ * @param record 输出参数，用于存储获取的记录
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::get_record(const RID &rid, Record &record)
 {
   return engine_->get_record(rid, record);
 }
 
+/**
+ * @brief 获取表名
+ * @return 表名
+ */
 const char *Table::name() const { return table_meta_.name(); }
 
+/**
+ * @brief 获取表元数据
+ * @return 表元数据常量引用
+ */
 const TableMeta &Table::table_meta() const { return table_meta_; }
 
+/**
+ * @brief 根据给定的字段生成一个记录
+ * @details 按照表的schema信息，将用户提供的字段值组装成一个完整的记录
+ * @param value_num 字段的个数
+ * @param values 每个字段的值
+ * @param record 生成的记录数据
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::make_record(int value_num, const Value *values, Record &record)
 {
   RC rc = RC::SUCCESS;
@@ -249,6 +333,14 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 设置值到记录中
+ * @details 将指定的值复制到记录中的对应字段位置
+ * @param record_data 记录数据指针
+ * @param value 要设置的值
+ * @param field 字段元数据
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::set_value_to_record(char *record_data, const Value &value, const FieldMeta *field)
 {
   size_t       copy_len = field->len();
@@ -262,35 +354,83 @@ RC Table::set_value_to_record(char *record_data, const Value &value, const Field
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 获取记录扫描器
+ * @details 委托给表引擎执行获取记录扫描器操作
+ * @param scanner 输出参数，用于存储获取的记录扫描器
+ * @param trx 事务对象指针
+ * @param mode 读写模式
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)
 {
   return engine_->get_record_scanner(scanner, trx, mode);
 }
 
+/**
+ * @brief 获取块文件扫描器
+ * @details 委托给表引擎执行获取块文件扫描器操作
+ * @param scanner 块文件扫描器对象引用
+ * @param trx 事务对象指针
+ * @param mode 读写模式
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadWriteMode mode)
 {
   return engine_->get_chunk_scanner(scanner, trx, mode);
 }
 
+/**
+ * @brief 创建索引
+ * @details 委托给表引擎执行创建索引操作
+ * @param trx 事务对象指针
+ * @param field_meta 字段元数据指针
+ * @param index_name 索引名称
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name)
 {
   return engine_->create_index(trx, field_meta, index_name);
 }
 
+/**
+ * @brief 删除记录
+ * @details 委托给表引擎执行删除记录操作
+ * @param record 要删除的记录
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::delete_record(const Record &record)
 {
   return engine_->delete_record(record);
 }
 
+/**
+ * @brief 根据索引名称查找索引
+ * @details 委托给表引擎执行查找索引操作
+ * @param index_name 索引名称
+ * @return 索引对象指针，若不存在则返回nullptr
+ */
 Index *Table::find_index(const char *index_name) const
 {
   return engine_->find_index(index_name);
 }
+
+/**
+ * @brief 根据字段名查找索引
+ * @details 委托给表引擎执行查找索引操作
+ * @param field_name 字段名称
+ * @return 索引对象指针，若不存在则返回nullptr
+ */
 Index *Table::find_index_by_field(const char *field_name) const
 {
   return engine_->find_index_by_field(field_name);
 }
 
+/**
+ * @brief 将数据同步到磁盘
+ * @details 委托给表引擎执行数据同步操作
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC Table::sync()
 {
   return engine_->sync();

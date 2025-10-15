@@ -21,40 +21,96 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @brief 双写页面结构
+ * @details 用于存储双写缓冲区中的页面数据及元信息
+ */
 struct DoubleWritePage
 {
 public:
+  /**
+   * @brief 默认构造函数
+   */
   DoubleWritePage() = default;
+  /**
+   * @brief 构造函数
+   * @param buffer_pool_id 缓冲区池ID
+   * @param page_num 页面编号
+   * @param page_index 页面在双写缓冲区文件中的索引
+   * @param page 页面数据
+   */
   DoubleWritePage(int32_t buffer_pool_id, PageNum page_num, int32_t page_index, Page &page);
 
 public:
+  /**
+   * @brief 页面键，用于唯一标识页面
+   */
   DoubleWritePageKey key;
-  int32_t            page_index = -1; /// 页面在double write buffer文件中的页索引
-  bool               valid = true; /// 表示页面是否有效，在页面被删除时，需要同时标记磁盘上的值。
+  /**
+   * @brief 页面在double write buffer文件中的页索引
+   */
+  int32_t            page_index = -1; 
+  /**
+   * @brief 表示页面是否有效，在页面被删除时，需要同时标记磁盘上的值。
+   */
+  bool               valid = true;
+  /**
+   * @brief 页面数据
+   */
   Page               page;
 
+  /**
+   * @brief 页面结构大小
+   */
   static const int32_t SIZE;
 };
 
+/**
+ * @brief DoubleWritePage的构造函数实现
+ * @param buffer_pool_id 缓冲区池ID
+ * @param page_num 页面编号
+ * @param page_index 页面在双写缓冲区文件中的索引
+ * @param _page 页面数据
+ */
 DoubleWritePage::DoubleWritePage(int32_t buffer_pool_id, PageNum page_num, int32_t page_index, Page &_page)
   : key{buffer_pool_id, page_num}, page_index(page_index), page(_page)
 {}
 
+/**
+ * @brief DoubleWritePage结构大小定义
+ */
 const int32_t DoubleWritePage::SIZE = sizeof(DoubleWritePage);
 
+/**
+ * @brief DoubleWriteBufferHeader结构大小定义
+ */
 const int32_t DoubleWriteBufferHeader::SIZE = sizeof(DoubleWriteBufferHeader);
 
+/**
+ * @brief DiskDoubleWriteBuffer的构造函数实现
+ * @param bp_manager 缓冲区池管理器引用
+ * @param max_pages 内存中保存的最大页面数
+ */
 DiskDoubleWriteBuffer::DiskDoubleWriteBuffer(BufferPoolManager &bp_manager, int max_pages /*=16*/) 
   : max_pages_(max_pages), bp_manager_(bp_manager)
 {
 }
 
+/**
+ * @brief DiskDoubleWriteBuffer的析构函数实现
+ * @details 析构时刷新所有页面并关闭文件
+ */
 DiskDoubleWriteBuffer::~DiskDoubleWriteBuffer()
 {
   flush_page();
   close(file_desc_);
 }
 
+/**
+ * @brief 打开双写缓冲区文件
+ * @param filename 文件名
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::open_file(const char *filename)
 {
   if (file_desc_ >= 0) {
@@ -72,6 +128,11 @@ RC DiskDoubleWriteBuffer::open_file(const char *filename)
   return load_pages();
 }
 
+/**
+ * @brief 刷新所有页面到磁盘
+ * @details 将缓冲区中的所有页面写入磁盘并清空缓冲区
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::flush_page()
 {
   sync();
@@ -92,6 +153,14 @@ RC DiskDoubleWriteBuffer::flush_page()
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 添加页面到双写缓冲区
+ * @details 将页面添加到内存缓冲区并写入磁盘文件
+ * @param bp 磁盘缓冲区池指针
+ * @param page_num 页面编号
+ * @param page 页面数据
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::add_page(DiskBufferPool *bp, PageNum page_num, Page &page)
 {
   scoped_lock lock_guard(lock_);
@@ -141,6 +210,12 @@ RC DiskDoubleWriteBuffer::add_page(DiskBufferPool *bp, PageNum page_num, Page &p
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 将页面写入双写缓冲区文件
+ * @details 将页面数据写入双写缓冲区文件的指定位置
+ * @param page 双写页面指针
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::write_page_internal(DoubleWritePage *page)
 {
   int32_t page_index = page->page_index;
@@ -158,6 +233,12 @@ RC DiskDoubleWriteBuffer::write_page_internal(DoubleWritePage *page)
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 将页面写入实际的磁盘缓冲区
+ * @details 将双写缓冲区中的页面数据写入对应的磁盘缓冲区
+ * @param dblwr_page 双写页面指针
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::write_page(DoubleWritePage *dblwr_page)
 {
   DiskBufferPool *disk_buffer = nullptr;
@@ -176,6 +257,14 @@ RC DiskDoubleWriteBuffer::write_page(DoubleWritePage *dblwr_page)
   return disk_buffer->write_page(dblwr_page->key.page_num, dblwr_page->page);
 }
 
+/**
+ * @brief 从双写缓冲区读取页面
+ * @details 从内存缓冲区中查找并读取页面数据
+ * @param bp 磁盘缓冲区池指针
+ * @param page_num 页面编号
+ * @param page 用于存储读取的页面数据
+ * @return 操作结果，成功返回RC::SUCCESS，不存在返回RC::BUFFERPOOL_INVALID_PAGE_NUM
+ */
 RC DiskDoubleWriteBuffer::read_page(DiskBufferPool *bp, PageNum page_num, Page &page)
 {
   scoped_lock lock_guard(lock_);
@@ -190,6 +279,12 @@ RC DiskDoubleWriteBuffer::read_page(DiskBufferPool *bp, PageNum page_num, Page &
   return RC::BUFFERPOOL_INVALID_PAGE_NUM;
 }
 
+/**
+ * @brief 清空指定缓冲区池的所有页面
+ * @details 清空与指定缓冲区池关联的所有页面，并将其写入实际磁盘
+ * @param buffer_pool 磁盘缓冲区池指针
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::clear_pages(DiskBufferPool *buffer_pool)
 {
   vector<DoubleWritePage *> spec_pages;
@@ -232,6 +327,11 @@ RC DiskDoubleWriteBuffer::clear_pages(DiskBufferPool *buffer_pool)
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 加载双写缓冲区文件中的页面
+ * @details 在启动时将双写缓冲区文件中的页面加载到内存
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::load_pages()
 {
   if (file_desc_ < 0) {
@@ -288,12 +388,25 @@ RC DiskDoubleWriteBuffer::load_pages()
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 恢复双写缓冲区中的页面
+ * @details 将双写缓冲区中的所有页面写入对应的磁盘缓冲区
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC DiskDoubleWriteBuffer::recover()
 {
   return flush_page();
 }
 
 ////////////////////////////////////////////////////////////////
+/**
+ * @brief VacuousDoubleWriteBuffer的add_page方法实现
+ * @details 直接将页面写入磁盘，不经过双写缓冲区
+ * @param bp 磁盘缓冲区池指针
+ * @param page_num 页面编号
+ * @param page 页面数据
+ * @return 操作结果，成功返回RC::SUCCESS
+ */
 RC VacuousDoubleWriteBuffer::add_page(DiskBufferPool *bp, PageNum page_num, Page &page)
 {
   return bp->write_page(page_num, page);

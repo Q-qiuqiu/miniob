@@ -19,54 +19,144 @@ See the Mulan PSL v2 for more details. */
 #include "common/value.h"
 #include <cstring>
 
+/**
+ * @brief 无符号字符类型定义
+ */
 using byte_t    = unsigned char;
+/**
+ * @brief 字节向量类型定义
+ */
 using bytes     = vector<byte_t>;
+/**
+ * @brief 64位浮点类型定义
+ */
 using float64_t = double_t;
 
 // reference: https://github.com/code0xff/orderedcodepp
+/**
+ * @brief OrderedCode 类用于实现有序编码和解码功能
+ * @details 该类提供了将各种数据类型（整数、浮点数、字符串等）转换为有序字节序列的功能，
+ * 使得这些字节序列可以直接进行比较，保持原始数据的大小顺序关系。
+ * 这对于实现B+树等需要有序存储的结构非常有用。
+ */
 class OrderedCode
 {
 public:
+  /**
+   * @brief 字符串终止标记
+   */
   static const byte_t term[];
+  /**
+   * @brief 0x00字符的转义标记
+   */
   static const byte_t lit00[];
+  /**
+   * @brief 0xff字符的转义标记
+   */
   static const byte_t litff[];
+  /**
+   * @brief 无穷大标记
+   */
   static const byte_t inf[];
+  /**
+   * @brief 最高有效位掩码数组
+   */
   static const byte_t msb[];
 
+  /**
+   * @brief 递增排序方向标记
+   */
   static const byte_t increasing = 0x00;
+  /**
+   * @brief 递减排序方向标记
+   */
   static const byte_t decreasing = 0xff;
 
+  /**
+   * @brief 表示无穷大的结构
+   * @details 用于表示排序中的最大值或最小值
+   */
   struct infinity
   {
+    /**
+     * @brief 比较运算符重载
+     * @param i 要比较的infinity对象
+     * @return 总是返回true，因为所有无穷大都是相等的
+     */
     bool operator==(const infinity &i) const { return true; }
 
+    /**
+     * @brief 移动语义比较运算符重载
+     * @param i 要比较的infinity对象
+     * @return 总是返回true，因为所有无穷大都是相等的
+     */
     bool operator==(infinity &&i) { return true; }
   };
 
+  /**
+   * @brief 表示递减排序值的模板结构
+   * @tparam T 值的类型
+   */
   template <typename T>
   struct decr
   {
+    /**
+     * @brief 存储的实际值
+     */
     T val;
 
+    /**
+     * @brief 比较运算符重载
+     * @param o 要比较的decr对象
+     * @return 如果两个对象的值相等则返回true
+     */
     bool operator==(const decr<T> &o) const { return val == o.val; }
 
+    /**
+     * @brief 移动语义比较运算符重载
+     * @param o 要比较的decr对象
+     * @return 如果两个对象的值相等则返回true
+     */
     bool operator==(decr<T> o) { return val == o.val; }
   };
 
+  /**
+   * @brief 表示字符串或无穷大的结构
+   */
   struct string_or_infinity
   {
+    /**
+     * @brief 字符串值
+     */
     string s;
+    /**
+     * @brief 是否表示无穷大
+     */
     bool   inf;
   };
 
+  /**
+   * @brief 表示后缀字符串的结构
+   */
   struct trailing_string : string
   {};
 
+  /**
+   * @brief 反转字节序列
+   * @details 对字节序列中的每个字节进行异或操作（XOR with 0xff）
+   * @param s 要反转的字节序列
+   */
   static void invert(span<byte_t> &s)
   {
     std::for_each(s.begin(), s.end(), [](byte_t &c) { c ^= 0xff; });
   }
 
+  /**
+   * @brief 将无符号64位整数添加到字节序列中
+   * @param s 目标字节序列
+   * @param x 要添加的无符号64位整数
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC append(bytes &s, uint64_t x)
   {
     vector<byte_t> buf(9);
@@ -79,6 +169,12 @@ public:
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 将有符号64位整数添加到字节序列中
+   * @param s 目标字节序列
+   * @param x 要添加的有符号64位整数
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC append(bytes &s, int64_t x)
   {
     if (x >= -64 && x < 64) {
@@ -116,6 +212,12 @@ public:
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 将64位浮点数添加到字节序列中
+   * @param s 目标字节序列
+   * @param x 要添加的64位浮点数
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT（如NaN）
+   */
   static RC append(bytes &s, float64_t x)
   {
     RC rc = RC::SUCCESS;
@@ -136,6 +238,13 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 将字符串添加到字节序列中
+   * @details 处理字符串中的特殊字符（0x00和0xff）并添加终止标记
+   * @param s 目标字节序列
+   * @param x 要添加的字符串
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC append(bytes &s, const string &x)
   {
     auto l = x.begin();
@@ -157,18 +266,37 @@ public:
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 将后缀字符串添加到字节序列中
+   * @details 直接添加后缀字符串内容，不添加终止标记
+   * @param s 目标字节序列
+   * @param x 要添加的后缀字符串
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC append(bytes &s, const trailing_string &x)
   {
     s.insert(s.end(), x.begin(), x.end());
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 将无穷大标记添加到字节序列中
+   * @param s 目标字节序列
+   * @param _ 无穷大对象（未使用）
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC append(bytes &s, const infinity &_)
   {
     s.insert(s.end(), &inf[0], &inf[0] + 2);
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 将字符串或无穷大添加到字节序列中
+   * @param s 目标字节序列
+   * @param x 字符串或无穷大对象
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC append(bytes &s, const string_or_infinity &x)
   {
     RC rc = RC::SUCCESS;
@@ -190,6 +318,13 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 从字节序列中解析出有符号64位整数
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param dst 目标整数变量
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC parse(span<byte_t> &s, byte_t dir, int64_t &dst)
   {
     if (s.empty()) {
@@ -242,6 +377,13 @@ public:
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 从字节序列中解析出无符号64位整数
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param dst 目标无符号整数变量
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC parse(span<byte_t> &s, byte_t dir, uint64_t &dst)
   {
     RC rc = RC::SUCCESS;
@@ -263,6 +405,13 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 从字节序列中解析出无穷大标记
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param _ 目标无穷大对象（未使用）
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC parse(span<byte_t> &s, byte_t dir, infinity &_)
   {
     RC rc = RC::SUCCESS;
@@ -278,6 +427,14 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 从字节序列中解析出字符串
+   * @details 处理转义字符并识别终止标记
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param dst 目标字符串变量
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC parse(span<byte_t> &s, byte_t dir, string &dst)
   {
     bytes buf;
@@ -330,6 +487,13 @@ public:
     return RC::INVALID_ARGUMENT;
   }
 
+  /**
+   * @brief 从字节序列中解析出64位浮点数
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param dst 目标浮点数变量
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT（如NaN）
+   */
   static RC parse(span<byte_t> &s, byte_t dir, float64_t &dst)
   {
     RC      rc = RC::SUCCESS;
@@ -345,6 +509,14 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 从字节序列中解析出字符串或无穷大
+   * @details 尝试先解析为无穷大，如果失败则尝试解析为字符串
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param dst 目标字符串或无穷大对象
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC parse(span<byte_t> &s, byte_t dir, string_or_infinity &dst)
   {
     RC rc = RC::SUCCESS;
@@ -359,6 +531,13 @@ public:
     }
   }
 
+  /**
+   * @brief 从字节序列中解析出后缀字符串
+   * @param s 源字节序列（解析后会移动指针）
+   * @param dir 排序方向（increasing或decreasing）
+   * @param dst 目标后缀字符串变量
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC parse(span<byte_t> &s, byte_t dir, trailing_string &dst)
   {
     dst.clear();
@@ -372,9 +551,20 @@ public:
   }
 };
 
+/**
+ * @brief Codec 类提供了数据库特定的编码和解码功能
+ * @details 基于OrderedCode类，用于编码和解码表ID、行ID等数据库相关信息，
+ * 支持生成有序的键值，便于在B+树等数据结构中存储和查询。
+ */
 class Codec
 {
 public:
+  /**
+   * @brief 编码不包含行ID的键
+   * @param table_id 表ID
+   * @param encoded_key 输出的编码键
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC encode_without_rid(int64_t table_id, bytes &encoded_key)
   {
     RC rc = RC::SUCCESS;
@@ -385,6 +575,13 @@ public:
     }
     return rc;
   }
+  /**
+   * @brief 编码包含表ID和行ID的完整键
+   * @param table_id 表ID
+   * @param rid 行ID
+   * @param encoded_key 输出的编码键
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC encode(int64_t table_id, uint64_t rid, bytes &encoded_key)
   {
     RC rc = RC::SUCCESS;
@@ -400,6 +597,12 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 编码表前缀
+   * @param table_id 表ID
+   * @param encoded_key 输出的编码键
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC encode_table_prefix(int64_t table_id, bytes &encoded_key)
   {
     RC rc = RC::SUCCESS;
@@ -413,6 +616,12 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 编码值对象
+   * @param val 要编码的值对象
+   * @param dst 输出的编码字节序列
+   * @return 操作结果，成功返回RC::SUCCESS，失败返回RC::INVALID_ARGUMENT
+   */
   static RC encode_value(const Value &val, bytes &dst)
   {
     RC rc = RC::SUCCESS;
@@ -437,6 +646,12 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 编码整数值
+   * @param val 要编码的整数值
+   * @param dst 输出的编码字节序列
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC encode_int(int64_t val, bytes &dst)
   {
     RC rc = RC::SUCCESS;
@@ -446,6 +661,12 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 从编码键中解码表ID
+   * @param encoded_key 编码的键
+   * @param table_id 输出的表ID
+   * @return 操作结果，成功返回RC::SUCCESS
+   */
   static RC decode(bytes &encoded_key, int64_t &table_id)
   {
     RC           rc = RC::SUCCESS;
@@ -461,7 +682,13 @@ public:
     return rc;
   }
 
+  /**
+   * @brief 表前缀常量
+   */
   static constexpr const char *table_prefix  = "t";
+  /**
+   * @brief 行键前缀常量
+   */
   static constexpr const char *rowkey_prefix = "r";
 };
 

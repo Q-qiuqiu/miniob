@@ -28,25 +28,83 @@ See the Mulan PSL v2 for more details. */
 /**
  * @brief 页帧标识符
  * @ingroup BufferPool
+ * 
+ * 用于唯一标识一个页帧，包含了BufferPool标识符和页面编号。
  */
 class FrameId
 {
 public:
+  /**
+   * @brief 默认构造函数
+   */
   FrameId() = default;
+  
+  /**
+   * @brief 构造函数
+   * @param buffer_pool_id BufferPool的标识符
+   * @param page_num 页面编号
+   */
   FrameId(int buffer_pool_id, PageNum page_num);
+  
+  /**
+   * @brief 判断是否与另一个FrameId相等
+   * @param other 要比较的另一个FrameId
+   * @return 如果相等返回true，否则返回false
+   */
   bool    equal_to(const FrameId &other) const;
+  
+  /**
+   * @brief 相等运算符重载
+   * @param other 要比较的另一个FrameId
+   * @return 如果相等返回true，否则返回false
+   */
   bool    operator==(const FrameId &other) const;
+  
+  /**
+   * @brief 计算哈希值
+   * @return 哈希值
+   */
   size_t  hash() const;
+  
+  /**
+   * @brief 获取BufferPool的标识符
+   * @return BufferPool的标识符
+   */
   int     buffer_pool_id() const;
+  
+  /**
+   * @brief 获取页面编号
+   * @return 页面编号
+   */
   PageNum page_num() const;
 
+  /**
+   * @brief 设置BufferPool的标识符
+   * @param buffer_pool_id BufferPool的标识符
+   */
   void set_buffer_pool_id(int buffer_pool_id) { buffer_pool_id_ = buffer_pool_id; }
+  
+  /**
+   * @brief 设置页面编号
+   * @param page_num 页面编号
+   */
   void set_page_num(PageNum page_num) { page_num_ = page_num; }
 
+  /**
+   * @brief 转换为字符串表示
+   * @return 字符串表示
+   */
   string to_string() const;
 
 private:
+  /**
+   * @brief BufferPool的标识符
+   */
   int     buffer_pool_id_ = -1;
+  
+  /**
+   * @brief 页面编号
+   */
   PageNum page_num_       = -1;
 };
 
@@ -65,6 +123,9 @@ private:
 class Frame
 {
 public:
+  /**
+   * @brief 析构函数
+   */
   ~Frame()
   {
     // LOG_DEBUG("deallocate frame. this=%p, lbt=%s", this, common::lbt());
@@ -76,11 +137,27 @@ public:
    * 而是调用reinit和reset。
    */
   void reinit() {}
+  
+  /**
+   * @brief 重置帧的状态
+   */
   void reset() {}
 
+  /**
+   * @brief 清空页面数据
+   */
   void clear_page() { memset(&page_, 0, sizeof(page_)); }
 
+  /**
+   * @brief 获取BufferPool的标识符
+   * @return BufferPool的标识符
+   */
   int  buffer_pool_id() const { return frame_id_.buffer_pool_id(); }
+  
+  /**
+   * @brief 设置BufferPool的标识符
+   * @param id BufferPool的标识符
+   */
   void set_buffer_pool_id(int id) { frame_id_.set_buffer_pool_id(id); }
 
   /**
@@ -91,11 +168,22 @@ public:
   Page &page() { return page_; }
 
   /**
-   * @brief 每个页面都有一个编号
+   * @brief 获取页面编号
    * @details 当前页面编号记录在了页面数据中，其实可以不记录，从磁盘中加载时记录在Frame信息中即可。
+   * @return 页面编号
    */
   PageNum page_num() const { return frame_id_.page_num(); }
+  
+  /**
+   * @brief 设置页面编号
+   * @param page_num 页面编号
+   */
   void    set_page_num(PageNum page_num) { frame_id_.set_page_num(page_num); }
+  
+  /**
+   * @brief 获取帧标识符
+   * @return 帧标识符
+   */
   FrameId frame_id() const { return frame_id_; }
 
   /**
@@ -104,13 +192,24 @@ public:
    * 序列号要小，那就可以从日志中读取这些更大序列号的日志，做重做操作，将页面恢复到最新状态，也就是redo。
    */
   LSN  lsn() const { return page_.lsn; }
+  
+  /**
+   * @brief 设置日志序列号
+   * @param lsn 日志序列号
+   */
   void set_lsn(LSN lsn) { page_.lsn = lsn; }
 
   /**
-   * @brief 页面校验和
+   * @brief 获取页面校验和
    * @details 用于校验页面完整性。如果页面写入一半时出现异常，可以通过校验和检测出来。
+   * @return 校验和
    */
   CheckSum check_sum() const { return page_.check_sum; }
+  
+  /**
+   * @brief 设置页面校验和
+   * @param check_sum 校验和
+   */
   void     set_check_sum(CheckSum check_sum) { page_.check_sum = check_sum; }
 
   /**
@@ -133,10 +232,23 @@ public:
    * @details 如果页面已经被写入磁盘文件，则应调用此函数。
    */
   void clear_dirty() { dirty_ = false; }
+  
+  /**
+   * @brief 判断页面是否为“脏”页
+   * @return 如果是脏页返回true，否则返回false
+   */
   bool dirty() const { return dirty_; }
 
+  /**
+   * @brief 获取页面数据的指针
+   * @return 页面数据的指针
+   */
   char *data() { return page_.data; }
 
+  /**
+   * @brief 判断页面是否可以被淘汰
+   * @return 如果可以被淘汰返回true，否则返回false
+   */
   bool can_purge() { return pin_count_.load() == 0; }
 
   /**
@@ -149,32 +261,98 @@ public:
   /**
    * @brief 释放一个当前页帧的引用计数
    * 与pin对应，但是通常不会加着frame manager的锁来访问
+   * @return 释放后的引用计数
    */
   int unpin();
+  
+  /**
+   * @brief 获取当前页帧的引用计数
+   * @return 引用计数
+   */
   int pin_count() const { return pin_count_.load(); }
 
+  /**
+   * @brief 获取写锁（使用默认事务ID）
+   */
   void write_latch();
+  
+  /**
+   * @brief 获取写锁
+   * @param xid 事务ID
+   */
   void write_latch(intptr_t xid);
 
+  /**
+   * @brief 释放写锁（使用默认事务ID）
+   */
   void write_unlatch();
+  
+  /**
+   * @brief 释放写锁
+   * @param xid 事务ID
+   */
   void write_unlatch(intptr_t xid);
 
+  /**
+   * @brief 获取读锁（使用默认事务ID）
+   */
   void read_latch();
+  
+  /**
+   * @brief 获取读锁
+   * @param xid 事务ID
+   */
   void read_latch(intptr_t xid);
+  
+  /**
+   * @brief 尝试获取读锁
+   * @return 如果获取成功返回true，否则返回false
+   */
   bool try_read_latch();
 
+  /**
+   * @brief 释放读锁（使用默认事务ID）
+   */
   void read_unlatch();
+  
+  /**
+   * @brief 释放读锁
+   * @param xid 事务ID
+   */
   void read_unlatch(intptr_t xid);
 
+  /**
+   * @brief 转换为字符串表示
+   * @return 字符串表示
+   */
   string to_string() const;
 
 private:
   friend class BufferPool;
 
+  /**
+   * @brief 脏页标记，标识页面是否被修改过
+   */
   bool          dirty_ = false;
+  
+  /**
+   * @brief 引用计数，表示当前有多少个线程在使用这个页面
+   */
   atomic<int>   pin_count_{0};
+  
+  /**
+   * @brief 访问时间，用于LRU算法
+   */
   unsigned long acc_time_ = 0;
+  
+  /**
+   * @brief 帧标识符
+   */
   FrameId       frame_id_;
+  
+  /**
+   * @brief 页面数据
+   */
   Page          page_;
 
   /// 在非并发编译时，加锁解锁动作将什么都不做
@@ -183,7 +361,19 @@ private:
   /// 使用一些手段来做测试，提前检测出头疼的死锁问题
   /// 如果编译时没有增加调试选项，这些代码什么都不做
   common::DebugMutex           debug_lock_;
+  
+  /**
+   * @brief 当前持有写锁的事务ID
+   */
   intptr_t                     write_locker_          = 0;
+  
+  /**
+   * @brief 写锁的递归计数
+   */
   int                          write_recursive_count_ = 0;
+  
+  /**
+   * @brief 持有读锁的事务ID及其递归计数
+   */
   unordered_map<intptr_t, int> read_lockers_;
 };

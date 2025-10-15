@@ -16,20 +16,52 @@ See the Mulan PSL v2 for more details. */
 #include "session/session.h"
 #include "session/thread_data.h"
 
+/**
+ * @brief FrameId的构造函数
+ * @param buffer_pool_id BufferPool的标识符
+ * @param page_num 页面编号
+ */
 FrameId::FrameId(int buffer_pool_id, PageNum page_num) : buffer_pool_id_(buffer_pool_id), page_num_(page_num) {}
 
+/**
+ * @brief 判断是否与另一个FrameId相等
+ * @param other 要比较的另一个FrameId
+ * @return 如果相等返回true，否则返回false
+ */
 bool FrameId::equal_to(const FrameId &other) const
 {
   return buffer_pool_id_ == other.buffer_pool_id_ && page_num_ == other.page_num_;
 }
 
+/**
+ * @brief 相等运算符重载
+ * @param other 要比较的另一个FrameId
+ * @return 如果相等返回true，否则返回false
+ */
 bool FrameId::operator==(const FrameId &other) const { return this->equal_to(other); }
 
+/**
+ * @brief 计算哈希值
+ * @return 哈希值
+ */
 size_t FrameId::hash() const { return (static_cast<size_t>(buffer_pool_id_) << 32L) | page_num_; }
 
+/**
+ * @brief 获取BufferPool的标识符
+ * @return BufferPool的标识符
+ */
 int     FrameId::buffer_pool_id() const { return buffer_pool_id_; }
+
+/**
+ * @brief 获取页面编号
+ * @return 页面编号
+ */
 PageNum FrameId::page_num() const { return page_num_; }
 
+/**
+ * @brief 转换为字符串表示
+ * @return 字符串表示
+ */
 string FrameId::to_string() const
 {
   stringstream ss;
@@ -38,6 +70,11 @@ string FrameId::to_string() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/**
+ * @brief 获取默认的调试事务ID
+ * @details 用于调试锁定机制的事务标识符获取函数
+ * @return 事务标识符
+ */
 intptr_t get_default_debug_xid()
 {
 #if 0
@@ -57,8 +94,15 @@ intptr_t get_default_debug_xid()
   }
 }
 
+/**
+ * @brief 获取写锁（使用默认事务ID）
+ */
 void Frame::write_latch() { write_latch(get_default_debug_xid()); }
 
+/**
+ * @brief 获取写锁
+ * @param xid 事务ID
+ */
 void Frame::write_latch(intptr_t xid)
 {
   {
@@ -85,8 +129,15 @@ void Frame::write_latch(intptr_t xid)
 #endif
 }
 
+/**
+ * @brief 释放写锁（使用默认事务ID）
+ */
 void Frame::write_unlatch() { write_unlatch(get_default_debug_xid()); }
 
+/**
+ * @brief 释放写锁
+ * @param xid 事务ID
+ */
 void Frame::write_unlatch(intptr_t xid)
 {
   // 因为当前已经加着写锁，而且写锁只有一个，所以不再加debug_lock来做校验
@@ -113,8 +164,15 @@ void Frame::write_unlatch(intptr_t xid)
   lock_.unlock();
 }
 
+/**
+ * @brief 获取读锁（使用默认事务ID）
+ */
 void Frame::read_latch() { read_latch(get_default_debug_xid()); }
 
+/**
+ * @brief 获取读锁
+ * @param xid 事务ID
+ */
 void Frame::read_latch(intptr_t xid)
 {
   {
@@ -143,6 +201,10 @@ void Frame::read_latch(intptr_t xid)
   }
 }
 
+/**
+ * @brief 尝试获取读锁
+ * @return 如果获取成功返回true，否则返回false
+ */
 bool Frame::try_read_latch()
 {
   intptr_t xid = get_default_debug_xid();
@@ -174,8 +236,15 @@ bool Frame::try_read_latch()
   return ret;
 }
 
+/**
+ * @brief 释放读锁（使用默认事务ID）
+ */
 void Frame::read_unlatch() { read_unlatch(get_default_debug_xid()); }
 
+/**
+ * @brief 释放读锁
+ * @param xid 事务ID
+ */
 void Frame::read_unlatch(intptr_t xid)
 {
   {
@@ -208,6 +277,10 @@ void Frame::read_unlatch(intptr_t xid)
   lock_.unlock_shared();
 }
 
+/**
+ * @brief 增加页帧的引用计数
+ * @details 当有用户使用该页帧时，需要增加引用计数，防止页帧被淘汰
+ */
 void Frame::pin()
 {
   scoped_lock debug_lock(debug_lock_);
@@ -221,6 +294,11 @@ void Frame::pin()
         pin_count, frame_id_.to_string().c_str(), xid, lbt());
 }
 
+/**
+ * @brief 减少页帧的引用计数
+ * @details 当用户不再使用该页帧时，减少引用计数
+ * @return 如果引用计数变为0返回true，否则返回false
+ */
 int Frame::unpin()
 {
   [[maybe_unused]] intptr_t xid = get_default_debug_xid();
@@ -249,6 +327,10 @@ int Frame::unpin()
   return pin_count;
 }
 
+/**
+ * @brief 获取当前时间的纳秒级时间戳
+ * @return 当前时间的纳秒级时间戳
+ */
 unsigned long current_time()
 {
   struct timespec tp;
@@ -256,8 +338,16 @@ unsigned long current_time()
   return tp.tv_sec * 1000 * 1000 * 1000UL + tp.tv_nsec;
 }
 
+/**
+ * @brief 标记页帧被访问
+ * @details 更新页帧的访问时间，用于LRU算法
+ */
 void Frame::access() { acc_time_ = current_time(); }
 
+/**
+ * @brief 转换为字符串表示
+ * @return 包含页帧信息的字符串
+ */
 string Frame::to_string() const
 {
   stringstream ss;

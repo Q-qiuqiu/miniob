@@ -20,14 +20,39 @@ See the Mulan PSL v2 for more details. */
 #include "storage/trx/trx.h"
 #include "json/json.h"
 
+/**
+ * @brief JSON序列化时使用的静态常量 - 表ID字段名
+ */
 static const Json::StaticString FIELD_TABLE_ID("table_id");
+/**
+ * @brief JSON序列化时使用的静态常量 - 表名字段名
+ */
 static const Json::StaticString FIELD_TABLE_NAME("table_name");
+/**
+ * @brief JSON序列化时使用的静态常量 - 存储格式字段名
+ */
 static const Json::StaticString FIELD_STORAGE_FORMAT("storage_format");
+/**
+ * @brief JSON序列化时使用的静态常量 - 存储引擎字段名
+ */
 static const Json::StaticString FIELD_STORAGE_ENGINE("storage_engine");
+/**
+ * @brief JSON序列化时使用的静态常量 - 字段列表字段名
+ */
 static const Json::StaticString FIELD_FIELDS("fields");
+/**
+ * @brief JSON序列化时使用的静态常量 - 索引列表字段名
+ */
 static const Json::StaticString FIELD_INDEXES("indexes");
+/**
+ * @brief JSON序列化时使用的静态常量 - 主键字段列表字段名
+ */
 static const Json::StaticString FIELD_PRIMARY_KEYS("primary_keys");
 
+/**
+ * @brief 拷贝构造函数实现
+ * @param other 另一个TableMeta对象
+ */
 TableMeta::TableMeta(const TableMeta &other)
     : table_id_(other.table_id_),
       name_(other.name_),
@@ -38,6 +63,10 @@ TableMeta::TableMeta(const TableMeta &other)
       record_size_(other.record_size_)
 {}
 
+/**
+ * @brief 交换两个TableMeta对象的内容
+ * @param other 另一个TableMeta对象
+ */
 void TableMeta::swap(TableMeta &other) noexcept
 {
   name_.swap(other.name_);
@@ -46,6 +75,18 @@ void TableMeta::swap(TableMeta &other) noexcept
   std::swap(record_size_, other.record_size_);
 }
 
+/**
+ * @brief 初始化表元数据
+ * @details 设置表的基本信息，包括表ID、表名、字段、主键、存储格式和存储引擎
+ * @param table_id 表ID
+ * @param name 表名
+ * @param trx_fields 事务相关字段
+ * @param attributes 表的属性信息
+ * @param primary_keys 主键字段列表
+ * @param storage_format 存储格式
+ * @param storage_engine 存储引擎
+ * @return 成功返回RC::SUCCESS，失败返回相应的错误码
+ */
 RC TableMeta::init(int32_t table_id, const char *name, const vector<FieldMeta> *trx_fields,
                    span<const AttrInfoSqlNode> attributes, const vector<string> &primary_keys, StorageFormat storage_format,
                    StorageEngine storage_engine)
@@ -104,22 +145,51 @@ RC TableMeta::init(int32_t table_id, const char *name, const vector<FieldMeta> *
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 添加索引元数据
+ * @details 将索引元数据添加到表的索引列表中
+ * @param index 索引元数据对象
+ * @return 成功返回RC::SUCCESS
+ */
 RC TableMeta::add_index(const IndexMeta &index)
 {
   indexes_.push_back(index);
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 获取表名
+ * @return 表名的字符串指针
+ */
 const char *TableMeta::name() const { return name_.c_str(); }
 
+/**
+ * @brief 获取第一个事务字段
+ * @return 事务字段的元数据指针
+ */
 const FieldMeta *TableMeta::trx_field() const { return &fields_[0]; }
 
+/**
+ * @brief 获取事务字段范围
+ * @return 事务字段的span对象
+ */
 span<const FieldMeta> TableMeta::trx_fields() const
 {
   return span<const FieldMeta>(fields_.data(), sys_field_num());
 }
 
+/**
+ * @brief 根据索引获取字段元数据
+ * @param index 字段索引
+ * @return 字段元数据的常量指针
+ */
 const FieldMeta *TableMeta::field(int index) const { return &fields_[index]; }
+
+/**
+ * @brief 根据名称获取字段元数据
+ * @param name 字段名称
+ * @return 字段元数据的常量指针，若不存在则返回nullptr
+ */
 const FieldMeta *TableMeta::field(const char *name) const
 {
   if (nullptr == name) {
@@ -133,6 +203,11 @@ const FieldMeta *TableMeta::field(const char *name) const
   return nullptr;
 }
 
+/**
+ * @brief 根据偏移量查找字段元数据
+ * @param offset 字段在记录中的偏移量
+ * @return 字段元数据的常量指针，若不存在则返回nullptr
+ */
 const FieldMeta *TableMeta::find_field_by_offset(int offset) const
 {
   for (const FieldMeta &field : fields_) {
@@ -142,10 +217,24 @@ const FieldMeta *TableMeta::find_field_by_offset(int offset) const
   }
   return nullptr;
 }
+
+/**
+ * @brief 获取字段总数（包括系统字段）
+ * @return 字段总数
+ */
 int TableMeta::field_num() const { return fields_.size(); }
 
+/**
+ * @brief 获取系统字段数量
+ * @return 系统字段数量
+ */
 int TableMeta::sys_field_num() const { return static_cast<int>(trx_fields_.size()); }
 
+/**
+ * @brief 根据名称获取索引元数据
+ * @param name 索引名称
+ * @return 索引元数据的常量指针，若不存在则返回nullptr
+ */
 const IndexMeta *TableMeta::index(const char *name) const
 {
   for (const IndexMeta &index : indexes_) {
@@ -156,6 +245,11 @@ const IndexMeta *TableMeta::index(const char *name) const
   return nullptr;
 }
 
+/**
+ * @brief 根据字段名查找索引元数据
+ * @param field 字段名称
+ * @return 索引元数据的常量指针，若不存在则返回nullptr
+ */
 const IndexMeta *TableMeta::find_index_by_field(const char *field) const
 {
   for (const IndexMeta &index : indexes_) {
@@ -166,12 +260,31 @@ const IndexMeta *TableMeta::find_index_by_field(const char *field) const
   return nullptr;
 }
 
+/**
+ * @brief 根据索引获取索引元数据
+ * @param i 索引位置
+ * @return 索引元数据的常量指针
+ */
 const IndexMeta *TableMeta::index(int i) const { return &indexes_[i]; }
 
+/**
+ * @brief 获取索引数量
+ * @return 索引数量
+ */
 int TableMeta::index_num() const { return indexes_.size(); }
 
+/**
+ * @brief 获取记录大小
+ * @return 记录的字节大小
+ */
 int TableMeta::record_size() const { return record_size_; }
 
+/**
+ * @brief 序列化表元数据到输出流
+ * @details 将表元数据转换为JSON格式并写入输出流
+ * @param ss 输出流
+ * @return 序列化的字节数，失败返回-1
+ */
 int TableMeta::serialize(ostream &ss) const
 {
   Json::Value table_value;
@@ -214,6 +327,12 @@ int TableMeta::serialize(ostream &ss) const
   return ret;
 }
 
+/**
+ * @brief 从输入流反序列化表元数据
+ * @details 从输入流读取JSON格式数据并解析为表元数据
+ * @param is 输入流
+ * @return 反序列化的字节数，失败返回-1
+ */
 int TableMeta::deserialize(istream &is)
 {
   Json::Value             table_value;
@@ -340,10 +459,23 @@ int TableMeta::deserialize(istream &is)
   return (int)(is.tellg() - old_pos);
 }
 
+/**
+ * @brief 获取序列化大小
+ * @return 当前返回-1，表示未实现
+ */
 int TableMeta::get_serial_size() const { return -1; }
 
+/**
+ * @brief 转换为字符串表示
+ * @details 当前实现为空
+ * @param output 输出字符串
+ */
 void TableMeta::to_string(string &output) const {}
 
+/**
+ * @brief 输出表元数据的详细描述
+ * @param os 输出流
+ */
 void TableMeta::desc(ostream &os) const
 {
   os << name_ << '(' << endl;

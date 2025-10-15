@@ -22,8 +22,15 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @brief ConditionFilter基类的虚析构函数实现
+ */
 ConditionFilter::~ConditionFilter() {}
 
+/**
+ * @brief DefaultConditionFilter的默认构造函数实现
+ * @details 初始化左右操作数的属性为非属性类型
+ */
 DefaultConditionFilter::DefaultConditionFilter()
 {
   left_.is_attr     = false;
@@ -34,8 +41,21 @@ DefaultConditionFilter::DefaultConditionFilter()
   right_.attr_length = 0;
   right_.attr_offset = 0;
 }
+
+/**
+ * @brief DefaultConditionFilter的析构函数实现
+ */
 DefaultConditionFilter::~DefaultConditionFilter() {}
 
+/**
+ * @brief 初始化条件过滤器
+ * @details 设置左右操作数、属性类型和比较操作符，并进行有效性检查
+ * @param left 左操作数描述
+ * @param right 右操作数描述
+ * @param attr_type 属性类型
+ * @param comp_op 比较操作符
+ * @return 初始化成功返回 RC::SUCCESS，属性类型或比较操作符无效时返回 RC::INVALID_ARGUMENT
+ */
 RC DefaultConditionFilter::init(const ConDesc &left, const ConDesc &right, AttrType attr_type, CompOp comp_op)
 {
   if (attr_type <= AttrType::UNDEFINED || attr_type >= AttrType::MAXTYPE) {
@@ -55,6 +75,13 @@ RC DefaultConditionFilter::init(const ConDesc &left, const ConDesc &right, AttrT
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 从SQL条件节点初始化条件过滤器
+ * @details 根据SQL解析得到的条件节点，构建条件过滤器。支持属性与属性、属性与值之间的比较
+ * @param table 表对象，用于获取字段元信息
+ * @param condition SQL条件节点
+ * @return 初始化成功返回 RC::SUCCESS，字段不存在时返回 RC::SCHEMA_FIELD_MISSING，类型不匹配时返回 RC::SCHEMA_FIELD_TYPE_MISMATCH
+ */
 RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
 {
   const TableMeta &table_meta = table.table_meta();
@@ -117,6 +144,12 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
   return init(left, right, type_left, condition.comp);
 }
 
+/**
+ * @brief 过滤一条记录
+ * @details 根据条件过滤器中定义的操作数和比较操作符，判断记录是否满足条件
+ * @param rec 要过滤的记录
+ * @return true 表示满足条件，false 表示不满足条件
+ */
 bool DefaultConditionFilter::filter(const Record &rec) const
 {
   Value left_value;
@@ -124,8 +157,10 @@ bool DefaultConditionFilter::filter(const Record &rec) const
 
   if (left_.is_attr) {  // value
     left_value.set_type(attr_type_);
+    // 如果是属性：从记录的指定偏移量处获取数据
     left_value.set_data(rec.data() + left_.attr_offset, left_.attr_length);
   } else {
+    // 如果是常量值：直接使用预定义的值
     left_value.set_value(left_.value);
   }
 
@@ -153,6 +188,10 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   return cmp_result;  // should not go here
 }
 
+/**
+ * @brief CompositeConditionFilter的析构函数实现
+ * @details 如果拥有内存所有权，释放过滤器数组的内存
+ */
 CompositeConditionFilter::~CompositeConditionFilter()
 {
   if (memory_owner_) {
@@ -161,6 +200,14 @@ CompositeConditionFilter::~CompositeConditionFilter()
   }
 }
 
+/**
+ * @brief 初始化复合条件过滤器的内部实现
+ * @details 设置过滤器数组、过滤器数量和内存所有权标志
+ * @param filters 条件过滤器数组
+ * @param filter_num 条件过滤器数量
+ * @param own_memory 是否拥有内存的所有权
+ * @return 初始化成功返回 RC::SUCCESS
+ */
 RC CompositeConditionFilter::init(const ConditionFilter *filters[], int filter_num, bool own_memory)
 {
   filters_      = filters;
@@ -168,11 +215,27 @@ RC CompositeConditionFilter::init(const ConditionFilter *filters[], int filter_n
   memory_owner_ = own_memory;
   return RC::SUCCESS;
 }
+
+/**
+ * @brief 初始化复合条件过滤器
+ * @details 设置过滤器数组和过滤器数量，默认不拥有内存所有权
+ * @param filters 条件过滤器数组
+ * @param filter_num 条件过滤器数量
+ * @return 初始化成功返回 RC::SUCCESS
+ */
 RC CompositeConditionFilter::init(const ConditionFilter *filters[], int filter_num)
 {
   return init(filters, filter_num, false);
 }
 
+/**
+ * @brief 从SQL条件节点数组初始化复合条件过滤器
+ * @details 根据SQL解析得到的条件节点数组，构建多个条件过滤器并组合成复合条件过滤器
+ * @param table 表对象，用于获取字段元信息
+ * @param conditions SQL条件节点数组
+ * @param condition_num 条件节点数量
+ * @return 初始化成功返回 RC::SUCCESS，条件节点为空时返回 RC::INVALID_ARGUMENT，单个条件初始化失败时返回相应错误码
+ */
 RC CompositeConditionFilter::init(Table &table, const ConditionSqlNode *conditions, int condition_num)
 {
   if (condition_num == 0) {
@@ -202,6 +265,12 @@ RC CompositeConditionFilter::init(Table &table, const ConditionSqlNode *conditio
   return init((const ConditionFilter **)condition_filters, condition_num, true);
 }
 
+/**
+ * @brief 过滤一条记录
+ * @details 对记录应用所有的条件过滤器，只有当所有过滤器都满足时才返回true
+ * @param rec 要过滤的记录
+ * @return true 表示满足所有条件，false 表示不满足至少一个条件
+ */
 bool CompositeConditionFilter::filter(const Record &rec) const
 {
   for (int i = 0; i < filter_num_; i++) {

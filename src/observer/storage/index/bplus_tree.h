@@ -8,11 +8,17 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-//
+/**
+ * @file bplus_tree.h
+ * @brief B+树索引的头文件定义
+ * @details 本文件定义了B+树索引的核心数据结构和类，包括节点结构、节点处理器、B+树处理器和扫描器等。
+ * B+树是一种自平衡的树形数据结构，常用于数据库索引，可以支持高效的查找、插入和删除操作。
+ * @ingroup BPlusTree
+ */
+
 //
 // Created by Xie Meiyi
 // Rewritten by Longda & Wangyunlai
-//
 //
 
 #pragma once
@@ -86,26 +92,51 @@ private:
  * @details BplusTree的键值除了字段属性，还有RID，是为了避免属性值重复而增加的。
  * @ingroup BPlusTree
  */
+/**
+ * @brief 键值比较器(BplusTree)
+ * @details BplusTree的键值由字段属性和RID组成，使用该比较器可以对两个键值进行比较。
+ * 首先会使用 AttrComparator 对字段属性部分进行比较，如果字段属性相同，则进一步比较 RID，
+ * 以此来确保即使字段属性值重复，也能通过 RID 区分键值的大小。
+ * @ingroup BPlusTree
+ */
 class KeyComparator
 {
 public:
+  /**
+   * @brief 初始化比较器
+   * @param type 属性类型
+   * @param length 属性长度
+   */
   void init(AttrType type, int length) { attr_comparator_.init(type, length); }
 
+  /**
+   * @brief 获取属性比较器
+   * @return 常量引用形式的属性比较器
+   */
   const AttrComparator &attr_comparator() const { return attr_comparator_; }
 
+  /**
+   * @brief 比较两个键值的大小
+   * @param v1 第一个键值的指针
+   * @param v2 第二个键值的指针
+   * @return 如果 v1 < v2，返回负数；如果 v1 == v2，返回 0；如果 v1 > v2，返回正数
+   */
   int operator()(const char *v1, const char *v2) const
   {
+    // 先比较属性部分
     int result = attr_comparator_(v1, v2);
     if (result != 0) {
       return result;
     }
 
+    // 属性部分相同，继续比较 RID
     const RID *rid1 = (const RID *)(v1 + attr_comparator_.attr_length());
     const RID *rid2 = (const RID *)(v2 + attr_comparator_.attr_length());
     return RID::compare(rid1, rid2);
   }
 
 private:
+  // 属性比较器，用于比较键值中的属性部分
   AttrComparator attr_comparator_;
 };
 
@@ -161,10 +192,10 @@ private:
 };
 
 /**
- * @brief the meta information of bplus tree
+ * @brief B+树的元信息
  * @ingroup BPlusTree
- * @details this is the first page of bplus tree.
- * only one field can be supported, can you extend it to multi-fields?
+ * @details 这是B+树的第一个页面。
+ * 当前仅支持单个字段，能否将其扩展为支持多字段？
  */
 struct IndexFileHeader
 {
@@ -196,11 +227,11 @@ struct IndexFileHeader
 };
 
 /**
- * @brief the common part of page describtion of bplus tree
+ * @brief B+树页面描述的公共部分
  * @ingroup BPlusTree
  * @code
- * storage format:
- * | page type | item number | parent page id |
+ * 存储格式:
+ * | 页面类型 | 条目数量 | 父页面ID |
  * @endcode
  */
 struct IndexNode
@@ -213,18 +244,19 @@ struct IndexNode
 };
 
 /**
- * @brief leaf page of bplus tree
+ * @brief B+树的叶子节点页面
  * @ingroup BPlusTree
  * @code
- * storage format:
- * | common header | prev page id | next page id |
- * | key0, rid0 | key1, rid1 | ... | keyn, ridn |
+ * 存储格式:
+ * | 公共头部 | 前一个页面ID | 后一个页面ID |
+ * | 键0, 记录ID0 | 键1, 记录ID1 | ... | 键n, 记录IDn |
  * @endcode
- * the key is in format: the key value of record and rid.
- * so the key in leaf page must be unique.
- * the value is rid.
- * can you implenment a cluster index ?
+ * 键的格式为: 记录的键值和记录ID。
+ * 因此叶子节点页面中的键必须是唯一的。
+ * 值为记录ID。
+ * 能否实现一个聚簇索引？
  */
+
 struct LeafIndexNode : public IndexNode
 {
   static constexpr int HEADER_SIZE = IndexNode::HEADER_SIZE + 4;

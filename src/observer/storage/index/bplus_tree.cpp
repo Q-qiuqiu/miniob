@@ -8,6 +8,14 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
+/**
+ * @file bplus_tree.cpp
+ * @brief B+树索引的实现文件
+ * @details 本文件包含了B+树索引的核心实现，包括节点处理、查找、插入、删除、分裂、合并等操作。
+ * 实现了高效的数据结构和算法，支持事务日志和崩溃恢复机制。
+ * @ingroup BPlusTree
+ */
+
 //
 // Created by Xie Meiyi
 // Rewritten by Longda & Wangyunlai
@@ -29,6 +37,12 @@ using namespace common;
  */
 #define FIRST_INDEX_PAGE 1
 
+/**
+ * @brief 计算内部节点的最大容量
+ * @details 根据属性长度计算一个B+树内部节点可以存储的最大键值对数量
+ * @param attr_length 属性长度
+ * @return 内部节点可以存储的最大键值对数量
+ */
 int calc_internal_page_capacity(int attr_length)
 {
   int item_size = attr_length + sizeof(RID) + sizeof(PageNum);
@@ -36,6 +50,12 @@ int calc_internal_page_capacity(int attr_length)
   return capacity;
 }
 
+/**
+ * @brief 计算叶子节点的最大容量
+ * @details 根据属性长度计算一个B+树叶子节点可以存储的最大键值对数量
+ * @param attr_length 属性长度
+ * @return 叶子节点可以存储的最大键值对数量
+ */
 int calc_leaf_page_capacity(int attr_length)
 {
   int item_size = attr_length + sizeof(RID) + sizeof(RID);
@@ -793,6 +813,18 @@ RC BplusTreeHandler::sync()
   return disk_buffer_pool_->flush_all_pages();
 }
 
+/**
+ * @brief 创建一个B+树索引
+ * @details 基于指定的文件名、属性类型和长度创建一个新的B+树索引
+ * @param log_handler 日志处理器，用于记录事务日志
+ * @param bpm 缓冲池管理器，管理内存中的页面缓存
+ * @param file_name 索引文件的名称
+ * @param attr_type 属性类型，如整型、字符型等
+ * @param attr_length 属性长度
+ * @param internal_max_size 内部节点最大大小，默认为-1（自动计算）
+ * @param leaf_max_size 叶子节点最大大小，默认为-1（自动计算）
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::create(LogHandler &log_handler,
                             BufferPoolManager &bpm,
                             const char *file_name, 
@@ -827,6 +859,17 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
   return rc;
 }
 
+/**
+ * @brief 创建一个B+树索引（重载版本）
+ * @details 基于指定的磁盘缓冲池、属性类型和长度创建一个新的B+树索引
+ * @param log_handler 日志处理器，用于记录事务日志
+ * @param buffer_pool 磁盘缓冲池，管理索引文件的页面访问
+ * @param attr_type 属性类型，如整型、字符型等
+ * @param attr_length 属性长度
+ * @param internal_max_size 内部节点最大大小，默认为-1（自动计算）
+ * @param leaf_max_size 叶子节点最大大小，默认为-1（自动计算）
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::create(LogHandler &log_handler,
             DiskBufferPool &buffer_pool,
             AttrType attr_type,
@@ -904,6 +947,14 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 打开一个已存在的B+树索引
+ * @details 根据指定的文件名打开一个已存在的B+树索引文件
+ * @param log_handler 日志处理器，用于记录事务日志
+ * @param bpm 缓冲池管理器，管理内存中的页面缓存
+ * @param file_name 索引文件的名称
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::open(LogHandler &log_handler, BufferPoolManager &bpm, const char *file_name)
 {
   if (disk_buffer_pool_ != nullptr) {
@@ -926,6 +977,13 @@ RC BplusTreeHandler::open(LogHandler &log_handler, BufferPoolManager &bpm, const
   return rc;
 }
 
+/**
+ * @brief 打开一个已存在的B+树索引（重载版本）
+ * @details 根据指定的磁盘缓冲池打开一个已存在的B+树索引
+ * @param log_handler 日志处理器，用于记录事务日志
+ * @param buffer_pool 磁盘缓冲池，管理索引文件的页面访问
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::open(LogHandler &log_handler, DiskBufferPool &buffer_pool)
 {
   if (disk_buffer_pool_ != nullptr) {
@@ -964,6 +1022,11 @@ RC BplusTreeHandler::open(LogHandler &log_handler, DiskBufferPool &buffer_pool)
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 关闭B+树索引
+ * @details 关闭当前打开的B+树索引文件并释放相关资源
+ * @return 操作结果，成功返回SUCCESS
+ */
 RC BplusTreeHandler::close()
 {
   if (disk_buffer_pool_ != nullptr) {
@@ -1396,7 +1459,13 @@ RC BplusTreeHandler::insert_entry_into_parent(BplusTreeMiniTransaction &mtr, Fra
 }
 
 /**
- * split one full node into two
+ * @brief 分割一个已满的B+树节点
+ * @details 当节点数据已满时，将其分割成两个节点，并将一半的数据移动到新节点中
+ * @tparam IndexNodeHandlerType 节点处理器类型，可以是叶子节点或内部节点
+ * @param mtr 迷你事务对象
+ * @param frame 要分割的节点页面帧
+ * @param new_frame 输出参数，分割后创建的新节点页面帧
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
  */
 template <typename IndexNodeHandlerType>
 RC BplusTreeHandler::split(BplusTreeMiniTransaction &mtr, Frame *frame, Frame *&new_frame)
@@ -1496,6 +1565,13 @@ MemPoolItem::item_unique_ptr BplusTreeHandler::make_key(const char *user_key, co
   return key;
 }
 
+/**
+ * @brief 向B+树中插入一个键值对
+ * @details 在B+树中插入指定的键和对应的记录ID（RID），如果键已存在则返回重复键错误
+ * @param user_key 用户提供的键值
+ * @param rid 记录ID，指向数据记录的位置
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::insert_entry(const char *user_key, const RID *rid)
 {
   if (user_key == nullptr || rid == nullptr) {
@@ -1543,6 +1619,14 @@ RC BplusTreeHandler::insert_entry(const char *user_key, const RID *rid)
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 根据键值从B+树中获取对应的记录ID列表
+ * @details 在B+树中查找指定键值对应的所有记录ID，并将它们添加到传入的列表中
+ * @param user_key 用户提供的键值
+ * @param key_len 键值长度
+ * @param rids 存储查找到的记录ID的列表
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::get_entry(const char *user_key, int key_len, list<RID> &rids)
 {
   BplusTreeScanner scanner(*this);
@@ -1566,6 +1650,13 @@ RC BplusTreeHandler::get_entry(const char *user_key, int key_len, list<RID> &rid
   return rc;
 }
 
+/**
+ * @brief 调整B+树的根节点
+ * @details 当根节点需要被调整时（如根节点为空或只有一个子节点），处理根节点的变更
+ * @param mtr 迷你事务对象
+ * @param root_frame 根节点所在的页面帧
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::adjust_root(BplusTreeMiniTransaction &mtr, Frame *root_frame)
 {
   LatchMemo &latch_memo = mtr.latch_memo();
@@ -1607,6 +1698,14 @@ RC BplusTreeHandler::adjust_root(BplusTreeMiniTransaction &mtr, Frame *root_fram
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 合并或重新分配B+树节点的数据
+ * @details 当节点的数据量不足时，根据情况决定是与相邻节点合并，还是从相邻节点重新分配数据
+ * @tparam IndexNodeHandlerType 节点处理器类型，可以是叶子节点或内部节点
+ * @param mtr 迷你事务对象
+ * @param frame 需要处理的节点页面帧
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 template <typename IndexNodeHandlerType>
 RC BplusTreeHandler::coalesce_or_redistribute(BplusTreeMiniTransaction &mtr, Frame *frame)
 {
@@ -1730,6 +1829,17 @@ RC BplusTreeHandler::coalesce(
   return coalesce_or_redistribute<InternalIndexNodeHandler>(mtr, parent_frame);
 }
 
+/**
+ * @brief 在B+树节点间重新分配数据
+ * @details 当一个节点的数据量不足，而与相邻节点合并会超出最大容量时，从相邻节点移动一部分数据到当前节点
+ * @tparam IndexNodeHandlerType 节点处理器类型，可以是叶子节点或内部节点
+ * @param mtr 迷你事务对象
+ * @param neighbor_frame 邻居节点的页面帧
+ * @param frame 当前节点的页面帧
+ * @param parent_frame 父节点的页面帧
+ * @param index 当前节点在父节点中的索引位置
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 template <typename IndexNodeHandlerType>
 RC BplusTreeHandler::redistribute(BplusTreeMiniTransaction &mtr, Frame *neighbor_frame, Frame *frame, Frame *parent_frame, int index)
 {
@@ -1783,6 +1893,13 @@ RC BplusTreeHandler::delete_entry_internal(BplusTreeMiniTransaction &mtr, Frame 
   return coalesce_or_redistribute<LeafIndexNodeHandler>(mtr, leaf_frame);
 }
 
+/**
+ * @brief 从B+树中删除一个键值对
+ * @details 在B+树中删除指定的键和对应的记录ID（RID）
+ * @param user_key 用户提供的键值
+ * @param rid 记录ID，指向数据记录的位置
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeHandler::delete_entry(const char *user_key, const RID *rid)
 {
   MemPoolItem::item_unique_ptr pkey = mem_pool_item_->alloc_unique_ptr();
@@ -1820,12 +1937,28 @@ RC BplusTreeHandler::delete_entry(const char *user_key, const RID *rid)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * @brief 创建一个B+树扫描器
+ * @details 初始化一个用于在B+树中进行范围扫描的扫描器对象
+ * @param tree_handler B+树处理器对象，提供对B+树的访问
+ */
 BplusTreeScanner::BplusTreeScanner(BplusTreeHandler &tree_handler)
     : tree_handler_(tree_handler), mtr_(tree_handler)
 {}
 
 BplusTreeScanner::~BplusTreeScanner() { close(); }
 
+/**
+ * @brief 打开一个B+树的范围扫描
+ * @details 初始化扫描器并设置扫描的左边界和右边界条件
+ * @param left_user_key 左边界键值，为nullptr表示从树的最左侧开始扫描
+ * @param left_len 左边界键值的长度
+ * @param left_inclusive 左边界是否包含
+ * @param right_user_key 右边界键值，为nullptr表示扫描到树的最右侧
+ * @param right_len 右边界键值的长度
+ * @param right_inclusive 右边界是否包含
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeScanner::open(const char *left_user_key, int left_len, bool left_inclusive, const char *right_user_key,
     int right_len, bool right_inclusive)
 {
@@ -1964,12 +2097,22 @@ RC BplusTreeScanner::open(const char *left_user_key, int left_len, bool left_inc
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 获取当前位置的记录ID
+ * @details 从当前节点的当前索引位置获取记录ID（RID）
+ * @param rid 输出参数，用于存储获取到的记录ID
+ */
 void BplusTreeScanner::fetch_item(RID &rid)
 {
   LeafIndexNodeHandler node(mtr_, tree_handler_.file_header_, current_frame_);
   memcpy(&rid, node.value_at(iter_index_), sizeof(rid));
 }
 
+/**
+ * @brief 检查是否到达扫描范围的结束位置
+ * @details 判断当前扫描位置是否已经超出了设定的右边界
+ * @return 如果到达范围结束返回true，否则返回false
+ */
 bool BplusTreeScanner::touch_end()
 {
   if (right_key_ == nullptr) {
@@ -1983,6 +2126,12 @@ bool BplusTreeScanner::touch_end()
   return compare_result > 0;
 }
 
+/**
+ * @brief 获取下一个记录ID
+ * @details 获取B+树扫描范围内的下一个记录ID，如果没有更多记录则返回记录结束标记
+ * @param rid 输出参数，用于存储获取到的下一个记录ID
+ * @return 操作结果，成功返回SUCCESS，没有更多记录返回RECORD_EOF，加锁失败返回LOCKED_NEED_WAIT
+ */
 RC BplusTreeScanner::next_entry(RID &rid)
 {
   if (nullptr == current_frame_) {
@@ -2037,6 +2186,11 @@ RC BplusTreeScanner::next_entry(RID &rid)
   return next_entry(rid);
 }
 
+/**
+ * @brief 关闭B+树扫描器
+ * @details 清理扫描器的资源并重置状态
+ * @return 操作结果，始终返回SUCCESS
+ */
 RC BplusTreeScanner::close()
 {
   inited_ = false;
@@ -2044,6 +2198,16 @@ RC BplusTreeScanner::close()
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 修复用户提供的键值
+ * @details 主要用于处理字符串类型的键值，确保其符合B+树索引的长度要求
+ * @param user_key 用户提供的原始键值
+ * @param key_len 用户提供的键值长度
+ * @param want_greater 是否需要获取大于用户键值的数据
+ * @param fixed_key 输出参数，修复后的键值缓冲区
+ * @param should_inclusive 输出参数，表示修复后的键值是否应该包含原始键值
+ * @return 操作结果，成功返回SUCCESS，失败返回错误码
+ */
 RC BplusTreeScanner::fix_user_key(
     const char *user_key, int key_len, bool want_greater, char **fixed_key, bool *should_inclusive)
 {

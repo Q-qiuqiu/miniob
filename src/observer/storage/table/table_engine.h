@@ -52,14 +52,14 @@ public:
    * @param record 要插入的记录
    * @return 成功返回RC::SUCCESS，失败返回相应的错误码
    */
-  virtual RC insert_record(Record &record) 
+  virtual RC insert_record(Record &record) = 0;
   
   /**
    * @brief 删除记录
    * @param record 要删除的记录
    * @return 成功返回RC::SUCCESS，失败返回相应的错误码
    */
-  virtual RC delete_record(const Record &record) 
+  virtual RC delete_record(const Record &record) = 0;
   
   /**
    * @brief 在事务上下文中插入记录

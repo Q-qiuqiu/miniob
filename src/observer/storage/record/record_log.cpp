@@ -12,23 +12,33 @@ See the Mulan PSL v2 for more details. */
 // Created by Wangyunlai on 2024/02/02.
 //
 
-#include "storage/record/record_log.h"
-#include "common/log/log.h"
-#include "common/lang/sstream.h"
-#include "common/lang/defer.h"
-#include "storage/clog/log_handler.h"
-#include "storage/record/record.h"
-#include "storage/buffer/disk_buffer_pool.h"
-#include "storage/clog/log_entry.h"
-#include "storage/clog/vacuous_log_handler.h"
-#include "storage/record/record_manager.h"
-#include "storage/buffer/frame.h"
-#include "storage/record/record_log.h"
+/**
+ * @file record_log.cpp
+ * @brief 记录日志功能实现文件
+ * @details 实现了记录操作相关的日志生成、记录和重放功能，支持数据库崩溃恢复
+ */
+
+#include "storage/record/record_log.h"        ///< 包含记录日志相关声明
+#include "common/log/log.h"                  ///< 包含日志功能
+#include "common/lang/sstream.h"             ///< 包含字符串流工具
+#include "common/lang/defer.h"               ///< 包含延迟执行功能
+#include "storage/clog/log_handler.h"        ///< 包含日志处理器
+#include "storage/record/record.h"           ///< 包含记录定义
+#include "storage/buffer/disk_buffer_pool.h" ///< 包含磁盘缓冲池
+#include "storage/clog/log_entry.h"          ///< 包含日志条目定义
+#include "storage/clog/vacuous_log_handler.h" ///< 包含空操作日志处理器
+#include "storage/record/record_manager.h"   ///< 包含记录管理器
+#include "storage/buffer/frame.h"            ///< 包含页帧定义
 
 using namespace common;
 
 // class RecordOperation
 
+/**
+ * @brief 将操作类型转换为字符串表示
+ * @details 生成包含操作类型ID和名称的字符串，方便日志记录和调试
+ * @return string 操作类型的可读字符串表示
+ */
 string RecordOperation::to_string() const
 {
   string ret = std::to_string(type_id()) + ":";
@@ -44,8 +54,16 @@ string RecordOperation::to_string() const
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // struct RecordLogHeader
 
+/**
+ * @brief 记录日志头部大小常量定义
+ */
 const int32_t RecordLogHeader::SIZE = sizeof(RecordLogHeader);
 
+/**
+ * @brief 将日志头部信息转换为字符串表示
+ * @details 生成包含日志头部所有关键信息的可读字符串，用于日志记录和调试
+ * @return string 日志头部的可读字符串表示
+ */
 string RecordLogHeader::to_string() const
 {
   stringstream ss;
@@ -72,6 +90,14 @@ string RecordLogHeader::to_string() const
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // class RecordLogHandler
 
+/**
+ * @brief 初始化记录日志处理器
+ * @param log_handler 底层日志处理器引用
+ * @param buffer_pool_id 缓冲池ID
+ * @param record_size 记录大小
+ * @param storage_format 存储格式
+ * @return RC 操作结果状态码
+ */
 RC RecordLogHandler::init(
     LogHandler &log_handler, int32_t buffer_pool_id, int32_t record_size, StorageFormat storage_format)
 {
@@ -85,7 +111,14 @@ RC RecordLogHandler::init(
   return rc;
 }
 
-// data is the column index in page
+/**
+ * @brief 初始化新页面并记录日志
+ * @details 记录页面初始化操作的日志，用于崩溃恢复时重建页面
+ * @param[out] frame 页帧指针，用于设置日志序列号
+ * @param page_num 页面编号
+ * @param data 页面数据，主要是列索引信息
+ * @return RC 操作结果状态码
+ */
 RC RecordLogHandler::init_new_page(Frame *frame, PageNum page_num, span<const char> data)
 {
   const int        log_payload_size = RecordLogHeader::SIZE + data.size();
@@ -109,6 +142,14 @@ RC RecordLogHandler::init_new_page(Frame *frame, PageNum page_num, span<const ch
   return rc;
 }
 
+/**
+ * @brief 插入记录并记录日志
+ * @details 记录插入记录操作的日志，用于崩溃恢复时重新插入该记录
+ * @param[out] frame 页帧指针，用于设置日志序列号
+ * @param rid 记录的位置标识符
+ * @param record 记录的内容
+ * @return RC 操作结果状态码
+ */
 RC RecordLogHandler::insert_record(Frame *frame, const RID &rid, const char *record)
 {
   const int        log_payload_size = RecordLogHeader::SIZE + record_size_;
@@ -129,6 +170,14 @@ RC RecordLogHandler::insert_record(Frame *frame, const RID &rid, const char *rec
   return rc;
 }
 
+/**
+ * @brief 更新记录并记录日志
+ * @details 记录更新记录操作的日志，用于崩溃恢复时重新更新该记录
+ * @param[out] frame 页帧指针，用于设置日志序列号
+ * @param rid 记录的位置标识符
+ * @param record 更新后的记录内容
+ * @return RC 操作结果状态码
+ */
 RC RecordLogHandler::update_record(Frame *frame, const RID &rid, const char *record)
 {
   const int        log_payload_size = RecordLogHeader::SIZE + record_size_;
@@ -149,6 +198,13 @@ RC RecordLogHandler::update_record(Frame *frame, const RID &rid, const char *rec
   return rc;
 }
 
+/**
+ * @brief 删除记录并记录日志
+ * @details 记录删除记录操作的日志，用于崩溃恢复时重新删除该记录
+ * @param[out] frame 页帧指针，用于设置日志序列号
+ * @param rid 记录的位置标识符
+ * @return RC 操作结果状态码
+ */
 RC RecordLogHandler::delete_record(Frame *frame, const RID &rid)
 {
   RecordLogHeader header;
@@ -171,8 +227,18 @@ RC RecordLogHandler::delete_record(Frame *frame, const RID &rid)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // class RecordLogReplayer
 
+/**
+ * @brief 记录日志重放器构造函数
+ * @param bpm 缓冲池管理器引用，用于获取和操作页面
+ */
 RecordLogReplayer::RecordLogReplayer(BufferPoolManager &bpm) : bpm_(bpm) {}
 
+/**
+ * @brief 重放单条日志条目
+ * @details 根据日志条目内容执行相应的重放操作，用于数据库恢复
+ * @param entry 日志条目引用
+ * @return RC 操作结果状态码
+ */
 RC RecordLogReplayer::replay(const LogEntry &entry)
 {
   LOG_TRACE("replaying record manager log: %s", entry.to_string().c_str());
@@ -241,6 +307,13 @@ RC RecordLogReplayer::replay(const LogEntry &entry)
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 重放初始化页面日志
+ * @details 根据日志内容重新初始化记录页面，用于恢复页面结构
+ * @param buffer_pool 磁盘缓冲池引用
+ * @param log_header 记录日志头部引用
+ * @return RC 操作结果状态码
+ */
 RC RecordLogReplayer::replay_init_page(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header)
 {
   VacuousLogHandler             vacuous_log_handler;
@@ -261,6 +334,13 @@ RC RecordLogReplayer::replay_init_page(DiskBufferPool &buffer_pool, const Record
   return rc;
 }
 
+/**
+ * @brief 重放插入记录日志
+ * @details 根据日志内容重新插入记录，用于恢复数据
+ * @param buffer_pool 磁盘缓冲池引用
+ * @param log_header 记录日志头部引用
+ * @return RC 操作结果状态码
+ */
 RC RecordLogReplayer::replay_insert(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header)
 {
   VacuousLogHandler             vacuous_log_handler;
@@ -285,6 +365,13 @@ RC RecordLogReplayer::replay_insert(DiskBufferPool &buffer_pool, const RecordLog
   return rc;
 }
 
+/**
+ * @brief 重放删除记录日志
+ * @details 根据日志内容重新删除记录，用于恢复数据一致性
+ * @param buffer_pool 磁盘缓冲池引用
+ * @param log_header 记录日志头部引用
+ * @return RC 操作结果状态码
+ */
 RC RecordLogReplayer::replay_delete(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header)
 {
   VacuousLogHandler             vacuous_log_handler;
@@ -308,6 +395,13 @@ RC RecordLogReplayer::replay_delete(DiskBufferPool &buffer_pool, const RecordLog
   return rc;
 }
 
+/**
+ * @brief 重放更新记录日志
+ * @details 根据日志内容重新更新记录，用于恢复最新数据状态
+ * @param buffer_pool 磁盘缓冲池引用
+ * @param header 记录日志头部引用
+ * @return RC 操作结果状态码
+ */
 RC RecordLogReplayer::replay_update(DiskBufferPool &buffer_pool, const RecordLogHeader &header)
 {
   VacuousLogHandler             vacuous_log_handler;

@@ -15,7 +15,10 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/meta_util.h"
 #include "storage/db/db.h"
 
-
+/**
+ * @brief 析构函数实现
+ * @details 释放所有资源，包括记录处理器、数据缓冲区池和索引对象
+ */
 HeapTableEngine::~HeapTableEngine()
 {
   if (record_handler_ != nullptr) {
@@ -36,6 +39,13 @@ HeapTableEngine::~HeapTableEngine()
 
   LOG_INFO("Table has been closed: %s", table_meta_->name());
 }
+
+/**
+ * @brief 插入记录实现
+ * @details 将记录插入到表中，并更新所有相关索引。如果索引更新失败，则回滚所有操作。
+ * @param record 要插入的记录
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::insert_record(Record &record)
 {
   RC rc = RC::SUCCESS;
@@ -61,11 +71,25 @@ RC HeapTableEngine::insert_record(Record &record)
   return rc;
 }
 
+/**
+ * @brief 访问记录实现
+ * @details 根据记录ID访问记录，并执行回调函数
+ * @param rid 记录ID
+ * @param visitor 回调函数，处理访问到的记录
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::visit_record(const RID &rid, function<bool(Record &)> visitor)
 {
   return record_handler_->visit_record(rid, visitor);
 }
 
+/**
+ * @brief 获取记录实现
+ * @details 根据记录ID从表中获取记录数据
+ * @param rid 记录ID
+ * @param record 输出参数，用于存储获取到的记录
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::get_record(const RID &rid, Record &record)
 {
   RC rc = record_handler_->get_record(rid, record);
@@ -77,6 +101,12 @@ RC HeapTableEngine::get_record(const RID &rid, Record &record)
   return rc;
 }
 
+/**
+ * @brief 删除记录实现
+ * @details 从所有索引中删除记录对应的条目，然后从表中删除记录
+ * @param record 要删除的记录
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::delete_record(const Record &record)
 {
   RC rc = RC::SUCCESS;
@@ -90,6 +120,14 @@ RC HeapTableEngine::delete_record(const Record &record)
   return rc;
 }
 
+/**
+ * @brief 获取记录扫描器实现
+ * @details 创建并初始化一个堆记录扫描器，用于遍历表中的记录
+ * @param scanner 输出参数，用于存储创建的扫描器指针
+ * @param trx 事务对象
+ * @param mode 读写模式
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)
 {
   scanner = new HeapRecordScanner(table_, *data_buffer_pool_, trx, db_->log_handler(), mode, nullptr);
@@ -100,6 +138,14 @@ RC HeapTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWr
   return rc;
 }
 
+/**
+ * @brief 获取块扫描器实现
+ * @details 初始化一个块扫描器，用于扫描表的数据块
+ * @param scanner 块扫描器对象
+ * @param trx 事务对象
+ * @param mode 读写模式
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadWriteMode mode)
 {
   RC rc = scanner.open_scan_chunk(table_, *data_buffer_pool_, db_->log_handler(), mode);
@@ -109,6 +155,15 @@ RC HeapTableEngine::get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadW
   return rc;
 }
 
+/**
+ * @brief 创建索引实现
+ * @details 在指定字段上创建索引，并为现有数据构建索引。
+ * 同时更新表的元数据并持久化到磁盘。
+ * @param trx 事务对象
+ * @param field_meta 字段元数据
+ * @param index_name 索引名称
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name)
 {
   if (common::is_blank(index_name) || nullptr == field_meta) {
@@ -208,6 +263,12 @@ RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const ch
   return rc;
 }
 
+/**
+ * @brief 向所有索引中插入条目的实现
+ * @param record 记录数据
+ * @param rid 记录ID
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::insert_entry_of_indexes(const char *record, const RID &rid)
 {
   RC rc = RC::SUCCESS;
@@ -220,6 +281,13 @@ RC HeapTableEngine::insert_entry_of_indexes(const char *record, const RID &rid)
   return rc;
 }
 
+/**
+ * @brief 从所有索引中删除条目的实现
+ * @param record 记录数据
+ * @param rid 记录ID
+ * @param error_on_not_exists 条目不存在时是否报错
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::delete_entry_of_indexes(const char *record, const RID &rid, bool error_on_not_exists)
 {
   RC rc = RC::SUCCESS;
@@ -234,6 +302,11 @@ RC HeapTableEngine::delete_entry_of_indexes(const char *record, const RID &rid, 
   return rc;
 }
 
+/**
+ * @brief 同步数据实现
+ * @details 将所有索引和数据缓冲区中的数据同步到磁盘
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::sync()
 {
   RC rc = RC::SUCCESS;
@@ -254,6 +327,11 @@ RC HeapTableEngine::sync()
   return rc;
 }
 
+/**
+ * @brief 根据索引名称查找索引实现
+ * @param index_name 索引名称
+ * @return 索引对象指针，如果不存在返回nullptr
+ */
 Index *HeapTableEngine::find_index(const char *index_name) const
 {
   for (Index *index : indexes_) {
@@ -263,6 +341,12 @@ Index *HeapTableEngine::find_index(const char *index_name) const
   }
   return nullptr;
 }
+
+/**
+ * @brief 根据字段名称查找索引实现
+ * @param field_name 字段名称
+ * @return 索引对象指针，如果不存在返回nullptr
+ */
 Index *HeapTableEngine::find_index_by_field(const char *field_name) const
 {
   const IndexMeta *index_meta = table_meta_->find_index_by_field(field_name);
@@ -272,6 +356,11 @@ Index *HeapTableEngine::find_index_by_field(const char *field_name) const
   return nullptr;
 }
 
+/**
+ * @brief 初始化记录处理器实现
+ * @details 打开数据文件并初始化记录处理器
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::init()
 {
   string data_file = table_data_file(db_->path().c_str(), table_meta_->name());
@@ -296,6 +385,11 @@ RC HeapTableEngine::init()
   return rc;
 }
 
+/**
+ * @brief 打开表引擎实现
+ * @details 初始化记录处理器、打开数据文件并加载所有索引
+ * @return 操作结果，成功返回RC::SUCCESS，失败返回相应错误码
+ */
 RC HeapTableEngine::open()
 {
   RC rc = RC::SUCCESS;

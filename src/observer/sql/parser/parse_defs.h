@@ -323,6 +323,7 @@ enum SqlCommandFlag
   SCF_EXPLAIN,                ///< 解释执行计划语句
   SCF_SET_VARIABLE,           ///< 设置变量语句
 };
+
 /**
  * @brief 解析SQL节点类
  * @ingroup SQLParser

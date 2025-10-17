@@ -149,3 +149,71 @@ ANALYZE                                 RETURN_TOKEN(ANALYZE);
 void scan_string(const char *str, yyscan_t scanner) {
   yy_switch_to_buffer(yy_scan_string(str, scanner), scanner);
 }
+
+/*
+ * 词法分析器功能总结：
+ * 
+ * 1. 基本配置选项：
+ *    - 不区分大小写（case-insensitive）
+ *    - 可重入设计（reentrant）
+ *    - 与Bison解析器配合（bison-bridge, bison-locations）
+ *    - 支持位置跟踪，记录每个token的行号和列号
+ * 
+ * 2. 支持的数据类型：
+ *    - INT_T: 整数类型
+ *    - STRING_T: 字符串类型（CHAR）
+ *    - FLOAT_T: 浮点数类型
+ *    - VECTOR_T: 向量类型
+ * 
+ * 3. 支持的SQL语句类型：
+ *    - 数据定义语言(DDL):
+ *      - CREATE TABLE: 创建表
+ *      - CREATE INDEX: 创建索引
+ *      - DROP TABLE: 删除表
+ *      - DESC: 描述表结构
+ *    
+ *    - 数据操纵语言(DML):
+ *      - SELECT: 查询数据
+ *      - INSERT INTO VALUES: 插入数据
+ *      - DELETE: 删除数据
+ *      - UPDATE SET: 更新数据
+ *    
+ *    - 事务控制:
+ *      - TRX_BEGIN: 开始事务
+ *      - TRX_COMMIT: 提交事务
+ *      - TRX_ROLLBACK: 回滚事务
+ *    
+ *    - 数据导入:
+ *      - LOAD DATA INFILE: 从文件导入数据
+ *    
+ *    - 信息查询:
+ *      - SHOW TABLES: 显示所有表
+ *      - EXPLAIN: 解释查询执行计划
+ *      - ANALYZE: 分析表
+ *    
+ *    - 系统命令:
+ *      - EXIT: 退出系统
+ *      - HELP: 显示帮助信息
+ *      - SYNC: 同步数据到磁盘
+ *      - CALC: 计算表达式
+ * 
+ * 4. 支持的SQL操作符：
+ *    - 算术操作符: +, -, *, /
+ *    - 比较操作符: =, !=, <>, <, <=, >, >=
+ *    - 逻辑操作符: AND
+ *    - 其他符号: (, ), ;, ., ,
+ * 
+ * 5. 字面量处理：
+ *    - NUMBER: 整数常量
+ *    - FLOAT: 浮点数常量
+ *    - SSS: 字符串常量（支持单引号和双引号）
+ *    - ID: 标识符（表名、列名等）
+ * 
+ * 6. 特殊功能：
+ *    - 位置信息记录：通过YY_USER_ACTION宏记录每个token的位置信息
+ *    - 内存管理：通过yyextra向量跟踪分配的字符串内存
+ *    - scan_string函数：支持从字符串缓冲区进行扫描
+ * 
+ * 此词法分析器是miniob数据库SQL解析的基础组件，负责将SQL语句文本分解为词法单元(token)，
+ * 为语法分析器提供输入。
+ */

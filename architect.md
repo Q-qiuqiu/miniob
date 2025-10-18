@@ -67,22 +67,33 @@ observer/
 └── main.cpp             # 服务器入口
 ```
 
-#### 2.1 sql/
+#### 2.1 observer/sql/
 SQL处理层，负责SQL语句的解析、优化和执行。
 
 ```
 sql/
 ├── executor/            # SQL执行器
 ├── expr/                # 表达式计算
+│   ├── aggregator       # 聚合函数实现。实现了SUM聚合函数，后续需要增加其他聚合函数的实现（TODO）。
+│   ├── expression       # 表达式计算模块。定义了SQL查询中各种表达式的抽象基类和具体实现类，包括字段表达式、常量表达式、比较表达式、算术表达式、聚合表达式等。表达式是SQL查询计算的基本单元，用于处理数据值的获取、转换和计算。后续需要实现区分unbound和bound的表达式（TODO）。后续可以优化成在 `FieldExpr` 中存储 `chunk` 中某列的位置信息（TODO）。
 ├── operator/            # 操作符实现（逻辑和物理）
 ├── optimizer/           # 查询优化器
 ├── parser/              # SQL解析器（词法和语法分析）
+│   ├── expression_binder # 表达式绑定上下文。维护查询中涉及的表信息，为表达式绑定提供必要的上下文环境。
+│   ├── lex_sql          # SQL词法分析器。将SQL语句分解为词法单元（token），主要是根据SQL语法规则进行分析。目前逻辑运算只实现了AND，数据类型和SQL语句的支持都比较简单。后续可以根据需要增加其他逻辑运算和数据类型的支持（TODO）。
+│   ├── parse_defs       # SQL解析器相关的数据结构、函数和接口定义。SELECT的解析进行了简化，仅支持from表，不能from表达式，且逻辑运算仅支持AND，也不支持复杂表达式（TODO）。INSERT语句也进行了简化，仅支持全字段插入，不能支持部分字段插入（TODO）。UPDATE语句也进行了简化，仅支持一个字段更新（TODO）。CREATE TABLE也进行了简化，后续需要补充（TODO）。创建索引仅支持对一个字段创建，后续也需要补充（TODO）。
+│   ├── parse_stage      # 解析SQL语句。SQL解析阶段的核心处理函数，负责将SQL语句解析为结构化的SQL节点。
+│   ├── parse            # SQL解析器的对外接口函数。主要是parse函数，用于将SQL语句文本解析为结构化的SQL节点对象。
+│   ├── resolve_stage    # 解析SQL语句的解析阶段。ResolveStage负责将解析后的SQL语句（ParsedSqlNode）转换为可执行的语句对象（Stmt），同时进行语义检查、表和字段的绑定、权限验证等工作。
+│   └── yacc_sql         # SQL语法分析器。将词法单元（token）序列转换为语法分析树（AST），主要是根据SQL语法规则进行分析。创建索引的语法也是仅支持一个字段，后续需要增加多个字段的支持（TODO）。
 ├── plan_cache/          # 执行计划缓存
+│   └── plan_cache_stage # 执行计划缓存。尝试从Plan的缓存中获取Plan，如果没有命中，则执行Optimizer。目前什么都没有实现。后续可以参考OceanBase的实现原则来进行实现，优化效果比较好（TODO）。
 ├── query_cache/         # 查询结果缓存
+│   └── query_cache_stage # 查询结果缓存。尝试从缓存中获取查询结果，如果没有命中，则执行查询。目前什么都没有实现。后续可以参考OceanBase的实现原则来进行实现（TODO）。
 └── stmt/                # 语句定义和处理
 ```
 
-#### 2.2 storage/
+#### 2.2 observer/storage/
 存储层，负责数据的持久化和访问管理。
 
 ```

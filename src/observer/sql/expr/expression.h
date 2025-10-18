@@ -12,6 +12,13 @@ See the Mulan PSL v2 for more details. */
 // Created by Wangyunlai on 2022/07/05.
 //
 
+/**
+ * @file expression.h
+ * @brief 表达式计算模块
+ * @details 该文件定义了SQL查询中各种表达式的抽象基类和具体实现类，包括字段表达式、常量表达式、
+ * 比较表达式、算术表达式、聚合表达式等。表达式是SQL查询计算的基本单元，用于处理数据值的获取、转换和计算。
+ */
+
 #pragma once
 
 #include "common/lang/string.h"
@@ -50,7 +57,7 @@ enum class ExprType
 };
 
 /**
- * @brief 表达式的抽象描述
+ * @brief 表达式的抽象基类
  * @ingroup Expression
  * @details 在SQL的元素中，任何需要得出值的元素都可以使用表达式来描述
  * 比如获取某个字段的值、比较运算、类型转换
@@ -61,83 +68,131 @@ enum class ExprType
  * 值，比如ValueExpr。
  *
  * TODO 区分unbound和bound的表达式
+ * @details 所有类型的SQL表达式的基类，定义了表达式系统的核心接口。在SQL查询中，任何需要计算数据值的元素
+ * 都可以用表达式来表示，包括字段引用、常量值、比较运算、算术运算、聚合运算等。
+ * 
+ * 表达式系统采用了面向对象的设计模式，通过不同的派生类实现各种具体的表达式类型。每个表达式都可以:
+ * 1. 根据输入的元组数据计算出值
+ * 2. 尝试在优化阶段计算出常量值
+ * 3. 从批量数据(Chunk)中获取表达式的计算结果列
+ * 4. 提供表达式的元数据信息(类型、长度、名称等)
  */
 class Expression
 {
 public:
+  /**
+   * @brief 默认构造函数
+   */
   Expression() = default;
 
+  /**
+   * @brief 虚析构函数
+   * @details 确保派生类对象能够被正确析构
+   */
   virtual ~Expression() = default;
 
   /**
-   * @brief 复制表达式
+   * @brief 创建当前表达式的深拷贝
+   * @return 指向新表达式对象的智能指针
    */
   virtual unique_ptr<Expression> copy() const = 0;
 
   /**
    * @brief 判断两个表达式是否相等
+   * @param[in] other 要比较的另一个表达式
+   * @return 如果两个表达式在语义上相等则返回true，否则返回false
    */
   virtual bool equal(const Expression &other) const { return false; }
+  
   /**
-   * @brief 根据具体的tuple，来计算当前表达式的值。tuple有可能是一个具体某个表的行数据
+   * @brief 根据输入的元组计算表达式的值
+   * @param[in] tuple 包含数据的元组，可能是表中的一行数据或中间结果
+   * @param[out] value 用于存储计算结果的值对象
+   * @return 操作结果状态码，成功返回RC::SUCCESS
    */
   virtual RC get_value(const Tuple &tuple, Value &value) const = 0;
 
   /**
-   * @brief 在没有实际运行的情况下，也就是无法获取tuple的情况下，尝试获取表达式的值
-   * @details 有些表达式的值是固定的，比如ValueExpr，这种情况下可以直接获取值
+   * @brief 在没有元组的情况下尝试获取表达式的值
+   * @details 主要用于优化阶段，对于可以在编译时计算出结果的表达式（如常量表达式），
+   * 可以提前计算以提高执行效率
+   * @param[out] value 用于存储计算结果的值对象
+   * @return 如果能计算出值返回RC::SUCCESS，否则返回相应的错误码
    */
   virtual RC try_get_value(Value &value) const { return RC::UNIMPLEMENTED; }
 
   /**
-   * @brief 从 `chunk` 中获取表达式的计算结果 `column`
+   * @brief 从数据块中获取表达式对应的列
+   * @details 用于批量计算，从包含多行数据的Chunk中获取表达式的计算结果列
+   * @param[in] chunk 包含多行数据的数据块
+   * @param[out] column 用于存储表达式计算结果的列
+   * @return 操作结果状态码，成功返回RC::SUCCESS
    */
   virtual RC get_column(Chunk &chunk, Column &column) { return RC::UNIMPLEMENTED; }
 
   /**
-   * @brief 表达式的类型
-   * 可以根据表达式类型来转换为具体的子类
+   * @brief 获取表达式的类型
+   * @return 表达式类型枚举值
    */
   virtual ExprType type() const = 0;
 
   /**
-   * @brief 表达式值的类型
-   * @details 一个表达式运算出结果后，只有一个值
+   * @brief 获取表达式计算结果的数据类型
+   * @return 属性类型枚举值
    */
   virtual AttrType value_type() const = 0;
 
   /**
-   * @brief 表达式值的长度
+   * @brief 获取表达式计算结果的长度
+   * @return 结果值的长度，对于可变长度类型很重要
    */
   virtual int value_length() const { return -1; }
 
   /**
-   * @brief 表达式的名字，比如是字段名称，或者用户在执行SQL语句时输入的内容
+   * @brief 获取表达式的名称
+   * @return 表达式的名称，如字段名或用户定义的别名
    */
   virtual const char *name() const { return name_.c_str(); }
-  virtual void        set_name(string name) { name_ = name; }
+  
+  /**
+   * @brief 设置表达式的名称
+   * @param[in] name 要设置的表达式名称
+   */
+  virtual void set_name(string name) { name_ = name; }
 
   /**
-   * @brief 表达式在下层算子返回的 chunk 中的位置
+   * @brief 获取表达式在数据块中的位置
+   * @return 表达式结果在Chunk中的列索引位置
    */
-  virtual int  pos() const { return pos_; }
+  virtual int pos() const { return pos_; }
+  
+  /**
+   * @brief 设置表达式在数据块中的位置
+   * @param[in] pos 表达式结果在Chunk中的列索引位置
+   */
   virtual void set_pos(int pos) { pos_ = pos; }
 
   /**
-   * @brief 用于 ComparisonExpr 获得比较结果 `select`。
+   * @brief 计算表达式在数据块上的选择结果
+   * @details 主要用于比较表达式，计算数据块中每行是否满足条件
+   * @param[in] chunk 包含多行数据的数据块
+   * @param[out] select 存储每行是否满足条件的布尔向量
+   * @return 操作结果状态码
    */
   virtual RC eval(Chunk &chunk, vector<uint8_t> &select) { return RC::UNIMPLEMENTED; }
 
 protected:
   /**
-   * @brief 表达式在下层算子返回的 chunk 中的位置
-   * @details 当 pos_ = -1 时表示下层算子没有在返回的 chunk 中计算出该表达式的计算结果，
-   * 当 pos_ >= 0时表示在下层算子中已经计算出该表达式的值（比如聚合表达式），且该表达式对应的结果位于
-   * chunk 中 下标为 pos_ 的列中。
+   * @brief 表达式在下层算子返回的chunk中的位置
+   * @details 当pos_ = -1时，表示下层算子没有预先计算该表达式；当pos_ >= 0时，
+   * 表示该表达式的结果已在下层算子的chunk中的指定位置可用
    */
   int pos_ = -1;
 
 private:
+  /**
+   * @brief 表达式的名称
+   */
   string name_;
 };
 
@@ -188,71 +243,217 @@ private:
 /**
  * @brief 字段表达式
  * @ingroup Expression
+ * @details 表示对表中某个字段的引用，用于在SQL查询中获取特定字段的值。
+ * 字段表达式包含表名和字段名信息，能够从输入的元组中提取指定字段的值。
  */
 class FieldExpr : public Expression
 {
 public:
+  /**
+   * @brief 默认构造函数
+   */
   FieldExpr() = default;
+  
+  /**
+   * @brief 构造函数，通过表指针和字段元数据创建字段表达式
+   * @param[in] table 表指针
+   * @param[in] field 字段元数据
+   */
   FieldExpr(const Table *table, const FieldMeta *field) : field_(table, field) {}
+  
+  /**
+   * @brief 构造函数，通过Field对象创建字段表达式
+   * @param[in] field 字段对象
+   */
   FieldExpr(const Field &field) : field_(field) {}
 
+  /**
+   * @brief 析构函数
+   */
   virtual ~FieldExpr() = default;
 
+  /**
+   * @brief 判断两个字段表达式是否相等
+   * @details 比较两个字段表达式是否引用同一个表中的同一个字段
+   * @param[in] other 要比较的另一个表达式
+   * @return 如果两个表达式引用同一个字段则返回true，否则返回false
+   */
   bool equal(const Expression &other) const override;
 
+  /**
+   * @brief 创建当前字段表达式的深拷贝
+   * @return 指向新字段表达式对象的智能指针
+   */
   unique_ptr<Expression> copy() const override { return make_unique<FieldExpr>(field_); }
 
+  /**
+   * @brief 获取表达式类型
+   * @return 表达式类型：ExprType::FIELD
+   */
   ExprType type() const override { return ExprType::FIELD; }
+  
+  /**
+   * @brief 获取字段的数据类型
+   * @return 字段的属性类型
+   */
   AttrType value_type() const override { return field_.attr_type(); }
-  int      value_length() const override { return field_.meta()->len(); }
+  
+  /**
+   * @brief 获取字段的长度
+   * @return 字段的长度
+   */
+  int value_length() const override { return field_.meta()->len(); }
 
+  /**
+   * @brief 获取字段对象的引用（非const版本）
+   * @return 字段对象的引用
+   */
   Field &field() { return field_; }
 
+  /**
+   * @brief 获取字段对象的const引用
+   * @return 字段对象的const引用
+   */
   const Field &field() const { return field_; }
 
+  /**
+   * @brief 获取字段所属的表名
+   * @return 表名
+   */
   const char *table_name() const { return field_.table_name(); }
+  
+  /**
+   * @brief 获取字段名
+   * @return 字段名
+   */
   const char *field_name() const { return field_.field_name(); }
 
+  /**
+   * @brief 从数据块中获取字段对应的列
+   * @param[in] chunk 包含多行数据的数据块
+   * @param[out] column 用于存储字段值的列
+   * @return 操作结果状态码
+   */
   RC get_column(Chunk &chunk, Column &column) override;
 
+  /**
+   * @brief 从元组中获取字段的值
+   * @param[in] tuple 包含数据的元组
+   * @param[out] value 用于存储字段值的对象
+   * @return 操作结果状态码
+   */
   RC get_value(const Tuple &tuple, Value &value) const override;
 
 private:
+  /**
+   * @brief 字段对象，包含表和字段的元数据信息
+   */
   Field field_;
 };
 
 /**
  * @brief 常量值表达式
  * @ingroup Expression
+ * @details 表示SQL查询中的常量值，如数字、字符串、NULL等。
+ * 常量表达式在查询执行过程中其值不会改变，可以直接从内部存储的值对象中获取。
  */
 class ValueExpr : public Expression
 {
 public:
+  /**
+   * @brief 默认构造函数
+   */
   ValueExpr() = default;
+  
+  /**
+   * @brief 构造函数，通过Value对象创建常量表达式
+   * @param[in] value 常量值对象
+   */
   explicit ValueExpr(const Value &value) : value_(value) {}
 
+  /**
+   * @brief 析构函数
+   */
   virtual ~ValueExpr() = default;
 
+  /**
+   * @brief 判断两个常量表达式是否相等
+   * @details 比较两个常量表达式的值是否相等
+   * @param[in] other 要比较的另一个表达式
+   * @return 如果两个表达式的值相等则返回true，否则返回false
+   */
   bool equal(const Expression &other) const override;
 
+  /**
+   * @brief 创建当前常量表达式的深拷贝
+   * @return 指向新常量表达式对象的智能指针
+   */
   unique_ptr<Expression> copy() const override { return make_unique<ValueExpr>(value_); }
 
+  /**
+   * @brief 获取常量表达式的值
+   * @details 对于常量表达式，直接返回存储的值，忽略输入的元组
+   * @param[in] tuple 包含数据的元组（常量表达式不需要此参数，但为了符合接口要求而保留）
+   * @param[out] value 用于存储常量值的对象
+   * @return 操作结果状态码，总是成功
+   */
   RC get_value(const Tuple &tuple, Value &value) const override;
+  
+  /**
+   * @brief 从数据块中获取常量表达式对应的列
+   * @details 为数据块中的每一行创建一个包含常量值的列
+   * @param[in] chunk 包含多行数据的数据块
+   * @param[out] column 用于存储常量值的列
+   * @return 操作结果状态码
+   */
   RC get_column(Chunk &chunk, Column &column) override;
+  
+  /**
+   * @brief 在没有元组的情况下尝试获取表达式的值
+   * @details 对于常量表达式，可以直接返回存储的值
+   * @param[out] value 用于存储计算结果的值对象
+   * @return 操作结果状态码，总是成功
+   */
   RC try_get_value(Value &value) const override
   {
     value = value_;
     return RC::SUCCESS;
   }
 
+  /**
+   * @brief 获取表达式类型
+   * @return 表达式类型：ExprType::VALUE
+   */
   ExprType type() const override { return ExprType::VALUE; }
+  
+  /**
+   * @brief 获取常量的数据类型
+   * @return 常量的属性类型
+   */
   AttrType value_type() const override { return value_.attr_type(); }
+  
+  /**
+   * @brief 获取常量的长度
+   * @return 常量的长度
+   */
   int      value_length() const override { return value_.length(); }
 
+  /**
+   * @brief 获取常量的值（非const版本）
+   * @param[out] value 用于存储常量值的对象
+   */
   void         get_value(Value &value) const { value = value_; }
+  
+  /**
+   * @brief 获取常量的值（const版本）
+   * @return 常量值对象的const引用
+   */
   const Value &get_value() const { return value_; }
 
 private:
+  /**
+   * @brief 常量值对象，存储实际的常量数据
+   */
   Value value_;
 };
 
